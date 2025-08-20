@@ -32,5 +32,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cedar-desktop-dmg
-          path: |
-            apps/desktop/src-tauri/**/*.dmg
+          path: apps/desktop/src-tauri/target/release/bundle/dmg/*.dmg

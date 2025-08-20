@@ -6,7 +6,8 @@ members = [
     "crates/cedar-smoke",
     "crates/notebook_api",
     "crates/notebook_server",
-    "crates/notebook_tauri"
+    "crates/notebook_tauri",
+    "apps/desktop/src-tauri"
 ]
 resolver = "2"
 

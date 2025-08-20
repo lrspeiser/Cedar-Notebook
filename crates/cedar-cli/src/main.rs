@@ -112,10 +112,29 @@ async fn cmd_doctor() -> Result<()> {
 
 async fn cmd_agent(runs_root: &Path, user_prompt: &str) -> Result<()> {
     let run = create_new_run(Some(runs_root))?;
+    // If CEDAR_RELAY_URL is set, we route via relay and use APP_SHARED_TOKEN for auth.
+    let relay_url = std::env::var("CEDAR_RELAY_URL").ok();
+    let app_shared_token = std::env::var("APP_SHARED_TOKEN").ok();
+
+    // OPENAI_API_KEY remains required for direct provider calls; if using relay, we log when key is absent.
+    let openai_api_key = match std::env::var("OPENAI_API_KEY") {
+        Ok(v) => v,
+        Err(_) => {
+            if relay_url.is_some() {
+                // No provider key needed in client when using relay
+                String::from("RELAY_MODE")
+            } else {
+                anyhow::bail!("OPENAI_API_KEY missing and CEDAR_RELAY_URL not set")
+            }
+        }
+    };
+
     let cfg = AgentConfig {
-        openai_api_key: std::env::var("OPENAI_API_KEY").context("OPENAI_API_KEY missing")?,
+        openai_api_key,
         openai_model: std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-5".into()),
         openai_base: std::env::var("OPENAI_BASE").ok(),
+        relay_url,
+        app_shared_token,
     };
     agent_loop(&run.dir, user_prompt, 30, cfg).await
 }

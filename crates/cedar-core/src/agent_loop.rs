@@ -14,6 +14,10 @@ pub struct AgentConfig {
     pub openai_api_key: String,
     pub openai_model: String,
     pub openai_base: Option<String>,
+    // Optional: if set, requests go to this relay instead of provider
+    pub relay_url: Option<String>,
+    // Optional: shared token for relay auth
+    pub app_shared_token: Option<String>,
 }
 
 pub async fn agent_loop(run_dir: &Path, user_prompt: &str, max_turns: usize, cfg: AgentConfig) -> Result<()> {
@@ -105,8 +109,9 @@ fn write_card(run_dir: &Path, title: &str, summary: &str, details: serde_json::V
 
 async fn call_openai_for_decision(input: &CycleInput, cfg: &AgentConfig) -> Result<CycleDecision> {
     // Use the Responses API with structured outputs. We send a compact transcript.
-    let base = cfg.openai_base.clone().unwrap_or_else(|| "https://api.openai.com".into());
-    let url = format!("{}/v1/responses", base);
+    // Determine base URL: prefer relay if configured
+    let base = if let Some(relay) = &cfg.relay_url { relay.clone() } else { cfg.openai_base.clone().unwrap_or_else(|| "https://api.openai.com".into()) };
+    let url = format!("{}/v1/responses", base.trim_end_matches('/'));
     let client = reqwest::Client::new();
 
     // Build a compact prompt
@@ -134,8 +139,20 @@ async fn call_openai_for_decision(input: &CycleInput, cfg: &AgentConfig) -> Resu
 
     let mut req = client.post(&url)
         .header(CONTENT_TYPE, "application/json")
-        .header(AUTHORIZATION, format!("Bearer {}", cfg.openai_api_key))
         .json(&body);
+
+    // If using relay, send x-app-token and do NOT send provider Authorization
+    if let Some(token) = &cfg.app_shared_token {
+        if cfg.relay_url.is_some() {
+            req = req.header("x-app-token", token);
+        } else {
+            // Direct provider call: use Authorization header
+            req = req.header(AUTHORIZATION, format!("Bearer {}", cfg.openai_api_key));
+        }
+    } else {
+        // No app token configured; default to direct provider Authorization
+        req = req.header(AUTHORIZATION, format!("Bearer {}", cfg.openai_api_key));
+    }
 
     let resp = req.send().await?;
     if !resp.status().is_success() {

@@ -1,0 +1,18 @@
+name: Check TS bindings freshness
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  gen-bindings:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Generate bindings (web + desktop)
+        run: |
+          cargo run -p notebook_api --bin export_types > bindings/desktop/bindings.ts
+          cp bindings/desktop/bindings.ts bindings/web/bindings.ts
+      - name: Check for drift
+        run: git diff --exit-code

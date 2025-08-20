@@ -3,6 +3,7 @@ use axum::{extract::{Path, Query}, http::StatusCode, response::{IntoResponse, Re
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use tracing_subscriber::{fmt, EnvFilter};
+use reqwest;
 
 async fn health() -> &'static str { "ok" }
 
@@ -73,7 +74,7 @@ async fn cmd_run_julia(Json(body): Json<RunJuliaBody>) -> Result<Json<serde_json
 #[derive(Deserialize)]
 struct RunShellBody { cmd: String, cwd: Option<String>, timeout_secs: Option<u64> }
 
-async fn cmd_run_shell(Json(body): JsonRunShellBody) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+async fn cmd_run_shell(Json(body): Json<RunShellBody>) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
     let run = notebook_core::runs::create_new_run(None).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     let out = notebook_core::executors::shell::run_shell(&run.dir, &body.cmd, body.cwd.as_deref(), body.timeout_secs)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;

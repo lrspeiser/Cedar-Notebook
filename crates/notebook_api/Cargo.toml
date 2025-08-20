@@ -10,6 +10,8 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
 specta = { version = "1" }
+rspc = { version = "0.3" }
+notebook_core = { path = "../notebook_core" }
 
 [dev-dependencies]
 tokio = { workspace = true }

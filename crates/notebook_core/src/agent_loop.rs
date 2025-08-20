@@ -25,9 +25,32 @@ pub async fn agent_loop(run_dir: &Path, user_prompt: &str, max_turns: usize, cfg
     let mut transcript: Vec<TranscriptItem> = vec![TranscriptItem{ role: "user".into(), content: user_prompt.into() }];
     let mut last_tool_result: Option<serde_json::Value> = None;
 
+    // Build simple data catalog metadata for the prompt (registered datasets, if any)
+    let mut data_catalog: Vec<String> = vec![];
+    if let Ok(cwd) = std::env::current_dir() {
+        let reg = crate::data::registry::DatasetRegistry::default_under_repo(&cwd);
+        if let Ok(rd) = std::fs::read_dir(&reg.root) {
+            for e in rd.flatten() {
+                if e.path().extension().map(|x| x=="parquet").unwrap_or(false) {
+                    if let Some(name) = e.path().file_stem().and_then(|s| s.to_str()) {
+                        data_catalog.push(name.to_string());
+                    }
+                }
+            }
+        }
+    }
+
     for turn in 0..max_turns {
+        let mut sys = system_prompt();
+        if !data_catalog.is_empty() {
+            sys.push_str("\nData catalog (registered parquet tables): ");
+            sys.push_str(&data_catalog.join(", "));
+            sys.push_str("\nIf none are useful for the task, you may use your own knowledge to write Julia code, but state that you are doing so in user_message.\n");
+        } else {
+            sys.push_str("\nNo registered datasets found; you may use your own knowledge to write Julia code, but state that you are doing so in user_message.\n");
+        }
         let cycle_input = CycleInput {
-            system_instructions: system_prompt(),
+            system_instructions: sys,
             transcript: transcript.clone(),
             tool_context: last_tool_result.clone().unwrap_or(json!({})),
         };
@@ -40,6 +63,7 @@ pub async fn agent_loop(run_dir: &Path, user_prompt: &str, max_turns: usize, cfg
 
         match decision {
             CycleDecision::RunJulia { args } => {
+                if let Some(msg) = &args.user_message { println!("{}", msg); }
                 let out = run_julia_cell(run_dir, &args.code)
                     .with_context(|| "Julia execution failed")?;
                 // Persist preview if any
@@ -49,6 +73,7 @@ pub async fn agent_loop(run_dir: &Path, user_prompt: &str, max_turns: usize, cfg
                 continue;
             }
             CycleDecision::Shell { args } => {
+                if let Some(msg) = &args.user_message { println!("{}", msg); }
                 let out = run_shell(run_dir, &args.cmd, args.cwd.as_deref(), args.timeout_secs)
                     .with_context(|| "Shell execution failed")?;
                 persist_tool_outcome(run_dir, "shell", &out)?;

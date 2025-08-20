@@ -14,8 +14,9 @@ fn ensure_julia_env(root: &Path) -> Result<PathBuf> {
     let env_dir = root.join(".cedar").join("julia_env");
     fs::create_dir_all(&env_dir)?;
     let project_toml = env_dir.join("Project.toml");
-    if !project_toml.exists() && env::var("CEDAR_JULIA_AUTO_ADD").unwrap_or_else(|_| "1".into()) == "1" {
+    if !project_toml.exists() {
         let mut project = String::from("[deps]\n");
+        // Minimal default environment; expanded as needed by user code
         project.push_str("CSV = \"336ed68f-0bac-5ca0-87d4-7b16caf5d00b\"\n");
         project.push_str("DataFrames = \"a93c6f00-e57d-5684-b7b6-d8193f3e46c0\"\n");
         project.push_str("DuckDB = \"a29a1f8d-6c5c-4f0d-bb3e-8f3d1d1a2f9b\"\n");
@@ -44,24 +45,22 @@ pub fn run_julia_cell(workdir: &Path, code: &str) -> Result<ToolOutcome> {
     // Build wrapper script that activates env and runs the cell
     let wrapper = format!(r#"
 import Pkg
-try
-    Pkg.activate(ENV["JULIA_PROJECT"])
-catch
-    # fallback: activate current directory
-    Pkg.activate(pwd())
-end
+# Unconditionally activate the provided project
+Pkg.activate(raw"{proj}")
+@info "Activated project" pkg_project=Base.active_project()
 try
     include(raw"{cell}")
 catch e
     @error "Cell errored" exception=(e, catch_backtrace())
     rethrow()
 end
-"#, cell=cell_path.display());
+"#, proj=env_dir.display(), cell=cell_path.display());
     let wrapper_path = workdir.join("run_cell.jl");
     write_string(&wrapper_path, &wrapper)?;
 
     let mut cmd = Command::new(julia_bin());
     cmd.arg("--project").arg(&env_dir);
+    cmd.env("JULIA_PROJECT", &env_dir);
     cmd.arg(wrapper_path.as_os_str());
     cmd.current_dir(workdir);
     cmd.stdout(Stdio::piped());

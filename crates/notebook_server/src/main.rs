@@ -1,3 +1,6 @@
+use tauri::command;
+
+
 use tower_http::cors::{CorsLayer, Any};
 use axum::{extract::{Path, Query}, http::StatusCode, response::{IntoResponse, Response, sse::{Sse, Event}}, routing::get, Json, Router};
 use serde::{Deserialize, Serialize};
@@ -104,6 +107,7 @@ struct SubmitQueryBody { prompt: String }
 #[derive(Serialize)]
 struct SubmitQueryResponse { run_id: String, ok: bool, final_message: Option<String> }
 
+#[tauri::command]
 async fn cmd_submit_query(Json(body): Json<SubmitQueryBody>) -> Result<Json<SubmitQueryResponse>, (StatusCode, String)> {
     // Create run dir
     let run = notebook_core::runs::create_new_run(None).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;

@@ -4,6 +4,10 @@
 # Local env & runs
 .env
 runs/
+artifacts/
+.tmp/
+.tmp/**
+.tmp/*
 # OS
 .DS_Store
 Thumbs.db

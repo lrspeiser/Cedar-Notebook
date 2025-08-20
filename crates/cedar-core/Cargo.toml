@@ -27,3 +27,4 @@ mime = { workspace = true }
 percent-encoding = { workspace = true }
 serde_path_to_error = "0.1"
 rand = { workspace = true }
+libc = { workspace = true }

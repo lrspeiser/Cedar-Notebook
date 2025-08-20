@@ -1,3 +1,4 @@
-# Use Git LFS for large example datasets or artifacts
+# Use Git LFS for large example datasets
+# IMPORTANT: Do NOT track user artifacts or run outputs in Git or Git LFS.
+# Artifacts and runs are user-local (see docs) and must never be committed.
 data/large/** filter=lfs diff=lfs merge=lfs -text
-artifacts/** filter=lfs diff=lfs merge=lfs -text

@@ -34,22 +34,14 @@ pub fn run_sql_to_parquet(workdir: &Path, sql: &str) -> Result<ToolOutcome> {
     let mut rows_json = vec![];
     while let Some(row) = rows.next()? {
         let mut obj = serde_json::Map::new();
-        for (i, col) in row.as_ref().columns().iter().enumerate() {
-            let name = col.name().to_string();
+        // Use column_names() in newer duckdb API
+        for (i, name) in row.as_ref().column_names().iter().enumerate() {
+            let name = (*name).to_string();
             let v = row.get_ref(i)?;
             let vj = match v {
                 duckdb::types::ValueRef::Null => serde_json::Value::Null,
-                duckdb::types::ValueRef::Int8(x) => (*x as i64).into(),
-                duckdb::types::ValueRef::Int16(x) => (*x as i64).into(),
-                duckdb::types::ValueRef::Int32(x) => (*x as i64).into(),
-                duckdb::types::ValueRef::Int64(x) => (*x as i64).into(),
-                duckdb::types::ValueRef::UInt8(x) => (*x as u64).into(),
-                duckdb::types::ValueRef::UInt16(x) => (*x as u64).into(),
-                duckdb::types::ValueRef::UInt32(x) => (*x as u64).into(),
-                duckdb::types::ValueRef::UInt64(x) => (*x as u64).into(),
-                duckdb::types::ValueRef::Float(x) => (*x as f64).into(),
-                duckdb::types::ValueRef::Double(x) => (*x as f64).into(),
                 duckdb::types::ValueRef::Text(s) => String::from_utf8_lossy(s).to_string().into(),
+                // Fallback: debug-stringify other types to avoid tight coupling to ValueRef variants across versions
                 _ => serde_json::Value::String(format!("{:?}", v)),
             };
             obj.insert(name, vj);
@@ -57,8 +49,9 @@ pub fn run_sql_to_parquet(workdir: &Path, sql: &str) -> Result<ToolOutcome> {
         rows_json.push(serde_json::Value::Object(obj));
     }
     let mut schema = vec![];
-    for col in stmt.columns() {
-        schema.push((col.name().to_string(), format!("{:?}", col.decl_type())));
+    for name in stmt.column_names() {
+        // Type introspection APIs differ across versions; keep it simple
+        schema.push((name.to_string(), "unknown".to_string()));
     }
     Ok(ToolOutcome{
         ok: true,

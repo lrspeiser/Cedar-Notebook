@@ -1,0 +1,17 @@
+# Rust
+/target
+**/*.rs.bk
+# Local env & runs
+.env
+runs/
+# OS
+.DS_Store
+Thumbs.db
+# Editors
+.idea
+.vscode
+# Node/web UI (deprecated)
+webui/dist
+# Julia project caches
+.cedar/julia_env/Manifest.toml
+.cedar/julia_env/compiled/

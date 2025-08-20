@@ -1,0 +1,29 @@
+[package]
+name = "cedar-core"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[dependencies]
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_with = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing-appender = { workspace = true }
+directories = { workspace = true }
+duckdb = { workspace = true }
+regex = { workspace = true }
+reqwest = { workspace = true }
+tokio = { workspace = true }
+parking_lot = { workspace = true }
+walkdir = { workspace = true }
+fs-err = { workspace = true }
+mime = { workspace = true }
+percent-encoding = { workspace = true }
+serde_path_to_error = "0.1"
+rand = { workspace = true }

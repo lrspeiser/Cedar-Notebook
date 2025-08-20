@@ -1,0 +1,44 @@
+[workspace]
+members = [
+    "crates/cedar-core",
+    "crates/cedar-cli",
+    "apps/cedar-egui"
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "Apache-2.0"
+authors = ["CedarAI Contributors"]
+
+[workspace.dependencies]
+anyhow = "1"
+thiserror = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_with = "3"
+uuid = { version = "1", features = ["v4", "fast-rng"] }
+chrono = { version = "0.4", features = ["serde"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tracing-appender = "0.2"
+clap = { version = "4", features = ["derive"] }
+dotenvy = "0.15"
+directories = "5"
+duckdb = { version = "0.10", features = ["bundled"] }
+regex = "1"
+reqwest = { version = "0.12", features = ["json", "stream"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "fs"] }
+parking_lot = "0.12"
+rayon = "1"
+indicatif = "0.17"
+human-panic = "1"
+walkdir = "2"
+fs-err = "2"
+rand = "0.8"
+# desktop app
+eframe = { version = "0.27", default-features = false, features = ["glow"] }
+egui = "0.27"
+# optional/minor
+mime = "0.3"
+percent-encoding = "2"

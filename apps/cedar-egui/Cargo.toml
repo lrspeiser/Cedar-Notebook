@@ -1,0 +1,14 @@
+[package]
+name = "cedar-egui"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[dependencies]
+cedar-core = { path = "../../crates/cedar-core" }
+eframe = { workspace = true }
+egui = { workspace = true }
+directories = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+walkdir = { workspace = true }

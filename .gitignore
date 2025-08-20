@@ -15,3 +15,8 @@ webui/dist
 # Julia project caches
 .cedar/julia_env/Manifest.toml
 .cedar/julia_env/compiled/
+
+# Relay service (Node)
+services/relay/node_modules/
+services/relay/dist/
+services/relay/.env

@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: cedar-notebook-relay
+    env: node
+    rootDir: services/relay
+    plan: free
+    buildCommand: tsc
+    startCommand: node dist/server.js
+    autoDeploy: true
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: openai_api_key
+        sync: false
+      - key: APP_SHARED_TOKEN
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false

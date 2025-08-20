@@ -1,0 +1,10 @@
+export type RunId = string
+export type RunSummary = { id: string; path: string }
+export type CardSummary = { path: string; title: string | null }
+export type TableSpec = { kind: TableSpecKind; arrow_ipc_base64?: string | null; parquet?: ParquetHandle | null }
+export type TableSpecKind = "arrow_ipc" | "parquet_handle"
+export type ParquetHandle = { id: string }
+export type PlotSpec = { kind: PlotKind; spec: any }
+export type PlotKind = "vega_lite"
+export type RichSpec = { kind: RichKind; content: string }
+export type RichKind = "html" | "markdown"

@@ -53,7 +53,14 @@ pub struct TranscriptItem {
     pub content: String,
 }
 
+// Canonical decision schema for the model.
+// Note: The OpenAI Responses API currently imposes constraints on JSON Schema inside text.format,
+// so we avoid advanced constructs (e.g., oneOf) and keep this permissive.
+// See README.md → "OpenAI configuration and key flow" for why the request/response
+// shapes look this way and how to configure env vars.
 pub fn decision_json_schema() -> serde_json::Value {
+    // Note: OpenAI Responses API currently disallows `oneOf` in text.format.schema.
+    // We provide a permissive args object with optional fields covering our actions.
     json!({
       "name": "cycle_decision",
       "schema": {
@@ -62,11 +69,17 @@ pub fn decision_json_schema() -> serde_json::Value {
         "properties": {
           "action": { "type": "string", "enum": ["run_julia","shell","more_from_user","final"] },
           "args": {
-            "oneOf": [
-              { "type":"object", "properties": { "code": { "type":"string" }, "env": { "type":["string","null"] } }, "required": ["code"], "additionalProperties": false },
-              { "type":"object", "properties": { "cmd": { "type":"string" }, "cwd": { "type":["string","null"] }, "timeout_secs": { "type":["integer","null"], "minimum": 1, "maximum": 600 } }, "required": ["cmd"], "additionalProperties": false },
-              { "type":"object", "properties": { "prompt": { "type":["string","null"] } }, "additionalProperties": false }
-            ]
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "code": { "type": ["string","null"] },
+              "env": { "type": ["string","null"] },
+              "cmd": { "type": ["string","null"] },
+              "cwd": { "type": ["string","null"] },
+              "timeout_secs": { "type": ["integer","null"], "minimum": 1, "maximum": 600 },
+              "prompt": { "type": ["string","null"] },
+              "user_output": { "type": ["string","null"] }
+            }
           },
           "user_output": { "type": ["string","null"] }
         },

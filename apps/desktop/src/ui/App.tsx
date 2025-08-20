@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 
 const SERVER = (import.meta as any).env?.VITE_SERVER_URL || 'http://127.0.0.1:8080'
 
+
 export default function App() {
   const [prompt, setPrompt] = useState('')
   const [status, setStatus] = useState<string>('')

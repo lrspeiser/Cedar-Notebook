@@ -95,6 +95,20 @@ app.post("/v1/relay", async (req: Request, res: Response) => {
   }
 });
 
+// Token-protected endpoint to provide the current OpenAI API key to clients.
+app.get("/v1/key", async (_req: Request, res: Response) => {
+  const openaiKey = process.env.OPENAI_API_KEY || process.env.openai_api_key;
+  if (!openaiKey) {
+    return res.status(500).json({ error: "server_misconfig", detail: "OPENAI_API_KEY not set" });
+  }
+  // Prevent caches from storing the secret response
+  res.setHeader("Cache-Control", "no-store");
+  // Do not log the full key; emit only a short fingerprint
+  const fp = `${openaiKey.slice(0, 6)}...${openaiKey.slice(-4)}`;
+  console.log(JSON.stringify({ at: "/v1/key", provided: true, key_fingerprint: fp }));
+  return res.status(200).json({ openai_api_key: openaiKey });
+});
+
 // Error handler for malformed JSON and other errors
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   if (err?.type === "entity.too.large") {

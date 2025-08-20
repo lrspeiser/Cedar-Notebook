@@ -22,3 +22,4 @@ fs-err = { workspace = true }
 indicatif = { workspace = true }
 tempfile = "3"
 axum = "0.7"
+keyring = "2"

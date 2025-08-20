@@ -88,6 +88,74 @@ async fn main() -> Result<()> {
     }
 }
 
+async fn maybe_fetch_and_cache_openai_key() -> Result<()> {
+    // If OPENAI_API_KEY already set and not forced to refresh, do nothing
+    let refresh = std::env::var("CEDAR_REFRESH_KEY").ok().as_deref() == Some("1");
+    if std::env::var("OPENAI_API_KEY").is_ok() && !refresh {
+        return Ok(());
+    }
+    let key_url = match std::env::var("CEDAR_KEY_URL") {
+        Ok(v) => v,
+        Err(_) => return Ok(()), // No server-configured key
+    };
+    let token = std::env::var("APP_SHARED_TOKEN").context("APP_SHARED_TOKEN required to fetch key")?;
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .get(&key_url)
+        .header("x-app-token", token)
+        .send()
+        .await
+        .context("failed to fetch key from server")?;
+    if !resp.status().is_success() {
+        let txt = resp.text().await.unwrap_or_default();
+        anyhow::bail!("key_fetch_error: {}", txt);
+    }
+    let v: serde_json::Value = resp.json().await.context("invalid key response JSON")?;
+    let key = v
+        .get("openai_api_key")
+        .and_then(|x| x.as_str())
+        .ok_or_else(|| anyhow::anyhow!("key missing in response"))?;
+
+    // Set for current process
+    std::env::set_var("OPENAI_API_KEY", key);
+
+    // Cache to system keychain when possible; fallback to config file
+    if let Err(e) = cache_key_securely(key) {
+        eprintln!("[warn] failed to store key in keychain: {} (falling back to file)", e);
+        cache_key_file(key).ok();
+    }
+
+    // Do NOT log the key
+    eprintln!("[info] OPENAI_API_KEY updated from server (cached)");
+    Ok(())
+}
+
+fn cache_key_securely(key: &str) -> Result<()> {
+    let entry = keyring::Entry::new("cedar-cli", "OPENAI_API_KEY");
+    entry.set_password(key)?;
+    Ok(())
+}
+
+fn cache_key_file(key: &str) -> Result<()> {
+    use std::fs;
+    use std::io::Write;
+    let proj = directories::ProjectDirs::from("com", "CedarAI", "cedar-cli")
+        .ok_or_else(|| anyhow::anyhow!("no config dir"))?;
+    let dir = proj.config_dir();
+    fs::create_dir_all(dir)?;
+    let path = dir.join(".env");
+    let mut f = fs::File::create(&path)?;
+    writeln!(f, "OPENAI_API_KEY={}", key)?;
+    // Best effort permissions
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(&path, fs::Permissions::from_mode(0o600));
+    }
+    Ok(())
+}
+
 fn install_tracing() {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
     fmt().with_env_filter(filter).init();
@@ -112,22 +180,16 @@ async fn cmd_doctor() -> Result<()> {
 
 async fn cmd_agent(runs_root: &Path, user_prompt: &str) -> Result<()> {
     let run = create_new_run(Some(runs_root))?;
-    // If CEDAR_RELAY_URL is set, we route via relay and use APP_SHARED_TOKEN for auth.
-    let relay_url = std::env::var("CEDAR_RELAY_URL").ok();
-    let app_shared_token = std::env::var("APP_SHARED_TOKEN").ok();
 
-    // OPENAI_API_KEY remains required for direct provider calls; if using relay, we log when key is absent.
-    let openai_api_key = match std::env::var("OPENAI_API_KEY") {
-        Ok(v) => v,
-        Err(_) => {
-            if relay_url.is_some() {
-                // No provider key needed in client when using relay
-                String::from("RELAY_MODE")
-            } else {
-                anyhow::bail!("OPENAI_API_KEY missing and CEDAR_RELAY_URL not set")
-            }
-        }
-    };
+    // Optional: fetch provider key from server once, then cache it locally (Keychain)
+    maybe_fetch_and_cache_openai_key().await?;
+
+    // Direct calls: no relay URL used for LLM traffic
+    let relay_url = None;
+    let app_shared_token = None;
+
+    let openai_api_key = std::env::var("OPENAI_API_KEY")
+        .context("OPENAI_API_KEY missing. Set it or configure CEDAR_KEY_URL + APP_SHARED_TOKEN to fetch it.")?;
 
     let cfg = AgentConfig {
         openai_api_key,

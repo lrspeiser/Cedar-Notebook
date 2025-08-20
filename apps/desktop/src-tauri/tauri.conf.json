@@ -1,0 +1,21 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Cedar Desktop",
+  "version": "0.0.1",
+  "identifier": "com.CedarAI.CedarDesktop",
+  "app": {
+    "windows": [
+      {
+        "title": "Cedar Desktop",
+        "width": 900,
+        "height": 700
+      }
+    ]
+  },
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "dist",
+    "devUrl": "http://localhost:5173"
+  }
+}

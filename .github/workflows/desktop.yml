@@ -1,0 +1,36 @@
+name: Build Desktop (macOS DMG)
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+      - name: Install deps
+        working-directory: apps/desktop
+        run: npm ci
+      - name: Build Tauri DMG
+        working-directory: apps/desktop
+        run: |
+          npm run build
+          npm run tauri:build
+      - name: Find DMG
+        run: |
+          echo "DMG path(s):"
+          find apps/desktop/src-tauri/ -name "*.dmg" -maxdepth 3 -print || true
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cedar-desktop-dmg
+          path: |
+            apps/desktop/src-tauri/**/*.dmg

@@ -5,15 +5,19 @@ const SERVER = (import.meta as any).env?.VITE_SERVER_URL || 'http://127.0.0.1:80
 export default function App() {
   const [prompt, setPrompt] = useState('')
   const [status, setStatus] = useState<string>('')
+  const [log, setLog] = useState<string>('')
   const [finalMessage, setFinalMessage] = useState<string>('')
   const [runId, setRunId] = useState<string>('')
 
   async function submit() {
     setStatus('Submitting...')
+    setLog('')
     setFinalMessage('')
     setRunId('')
     try {
-      const res = await fetch(`${SERVER}/commands/submit_query`, {
+      const url = `${SERVER}/commands/submit_query`
+      setLog(`POST ${url}`)
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ prompt })
@@ -28,6 +32,7 @@ export default function App() {
       setStatus('Done')
     } catch (e: any) {
       setStatus(`Error: ${e?.message || String(e)}`)
+      setLog(prev => `${prev}\n${e?.stack || ''}`)
     }
   }
 
@@ -55,6 +60,12 @@ export default function App() {
         </div>
       )}
       <hr />
+      <details>
+        <summary>Logs</summary>
+        <pre style={{ whiteSpace: 'pre-wrap', background: '#eee', padding: 8 }}>
+          {log}
+        </pre>
+      </details>
       <small>Server: {SERVER}. Configure with VITE_SERVER_URL.</small>
     </div>
   )

@@ -114,6 +114,30 @@ The Runs inspector quickly summarizes recent runs and card counts:
 cargo run --bin cedar-cli -- runs-inspect --limit 20 --details
 ```
 
+## OpenAI configuration and key flow
+There are two supported ways to provide credentials to CedarCLI for direct calls to OpenAI:
+
+1) Local env var (simplest)
+- Set OPENAI_API_KEY in your environment.
+- Optional: set OPENAI_MODEL (defaults to gpt-5) and OPENAI_BASE (defaults to https://api.openai.com).
+
+2) Server-provided key (recommended for rotation)
+- Deploy the small Node relay under services/relay (Render).
+- Set env in Render for that service:
+  - openai_api_key: your provider key
+  - APP_SHARED_TOKEN: long random value (shared with client)
+- The relay exposes GET /v1/key, which returns { openai_api_key: "..." } when x-app-token matches.
+- On the client machine, set:
+  - CEDAR_KEY_URL=https://<your-service>.onrender.com/v1/key
+  - APP_SHARED_TOKEN=<same as server>
+  - (Optional) CEDAR_REFRESH_KEY=1 to force re-fetch on next run
+- CedarCLI will fetch the key once, store it in the system keychain (fallback to ~/.config/cedar-cli/.env), then call OpenAI directly.
+
+Notes
+- The OpenAI API call uses the Responses API with text.format.type = json_object so the model returns a single JSON object decision.
+- We do not route LLM calls through the server; the server is only used for key distribution.
+- For troubleshooting and example commands, see Quick start.
+
 ## Prerequisites and environment
 - Rust (stable toolchain)
 - Julia 1.10+

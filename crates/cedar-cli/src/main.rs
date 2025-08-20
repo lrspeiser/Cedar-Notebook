@@ -88,6 +88,11 @@ async fn main() -> Result<()> {
     }
 }
 
+// Fetch OPENAI_API_KEY from the configured server (if CEDAR_KEY_URL + APP_SHARED_TOKEN are set)
+// and cache it locally (Keychain preferred). This enables direct client->OpenAI calls without
+// embedding provider keys in the binary. For full setup, see README.md:
+//   - "OpenAI configuration and key flow"
+//   - "Quick start" (env vars)
 async fn maybe_fetch_and_cache_openai_key() -> Result<()> {
     // If OPENAI_API_KEY already set and not forced to refresh, do nothing
     let refresh = std::env::var("CEDAR_REFRESH_KEY").ok().as_deref() == Some("1");
@@ -133,7 +138,7 @@ async fn maybe_fetch_and_cache_openai_key() -> Result<()> {
 
 fn cache_key_securely(key: &str) -> Result<()> {
     let entry = keyring::Entry::new("cedar-cli", "OPENAI_API_KEY");
-    entry.set_password(key)?;
+    entry?.set_password(key)?;
     Ok(())
 }
 
@@ -219,7 +224,7 @@ println("```")
     if let Some(table) = out.table {
         // Register under data/parquet/
         let reg = DatasetRegistry::default_under_repo(&std::env::current_dir()?) ;
-        let dst = reg.register_parquet(&fname.replace('.','_'), Path::new(&table.path.unwrap()))?;
+        let dst = reg.register_parquet(&fname.replace('.',"_"), Path::new(&table.path.unwrap()))?;
         println!("Registered dataset -> {}", dst.display());
     }
     Ok(())

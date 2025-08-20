@@ -96,6 +96,8 @@ app.post("/v1/relay", async (req: Request, res: Response) => {
 });
 
 // Token-protected endpoint to provide the current OpenAI API key to clients.
+// See repo README.md: "OpenAI configuration and key flow" for how the CLI consumes /v1/key
+// and calls OpenAI directly (the key never leaves the client once fetched).
 app.get("/v1/key", async (_req: Request, res: Response) => {
   const openaiKey = process.env.OPENAI_API_KEY || process.env.openai_api_key;
   if (!openaiKey) {

@@ -125,15 +125,20 @@ async fn call_openai_for_decision(input: &CycleInput, cfg: &AgentConfig) -> Resu
     prompt.push_str(&input.tool_context.to_string());
     prompt.push_str("\n--- End ---\n");
 
+    // NOTE: OpenAI Responses API request shape
+    // - We use text.format.type = "json_object" so the model returns a single JSON object.
+    // - For required environment and configuration details (direct calls vs. server-provided key),
+    //   see README.md sections "OpenAI configuration and key flow" and "Quick start".
+    //   The CLI fetch/caches OPENAI_API_KEY if CEDAR_KEY_URL + APP_SHARED_TOKEN are set; otherwise it
+    //   expects OPENAI_API_KEY to be present in the environment.
     let body = serde_json::json!({
         "model": cfg.openai_model,
         "input": [
             {"role": "system", "content": "Return only valid JSON for the given schema. No prose."},
             {"role": "user", "content": prompt}
         ],
-        "response_format": {
-            "type": "json_schema",
-            "json_schema": decision_json_schema()
+        "text": {
+            "format": { "type": "json_object" }
         }
     });
 
@@ -190,6 +195,27 @@ async fn call_openai_for_decision(input: &CycleInput, cfg: &AgentConfig) -> Resu
     let decision: CycleDecision = match serde_json::from_str(&buf) {
         Ok(d) => d,
         Err(e) => {
+            // Heuristic fallback: accept simpler shapes the model might emit when not using strict schema
+            if let Ok(obj) = serde_json::from_str::<serde_json::Value>(&buf) {
+                if let Some(action) = obj.get("action").and_then(|x| x.as_str()) {
+                    match action {
+                        "more_from_user" => {
+                            let prompt = obj.get("prompt")
+                                .or_else(|| obj.get("question"))
+                                .and_then(|x| x.as_str())
+                                .map(|s| s.to_string());
+                            let args = crate::llm_protocol::MoreArgs { prompt };
+                            return Ok(CycleDecision::MoreFromUser { args });
+                        }
+                        "final" => {
+                            if let Some(uo) = obj.get("user_output").and_then(|x| x.as_str()) {
+                                return Ok(CycleDecision::Final { user_output: uo.to_string() });
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
             // Attempt to extract from top-level response if model already returned JSON
             if let Ok(d2) = serde_json::from_value(v.clone()) {
                 d2

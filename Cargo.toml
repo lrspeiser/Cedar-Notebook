@@ -3,7 +3,10 @@ members = [
     "crates/cedar-core",
     "crates/cedar-cli",
     "apps/cedar-egui",
-    "crates/cedar-smoke"
+    "crates/cedar-smoke",
+    "crates/notebook_api",
+    "crates/notebook_server",
+    "crates/notebook_tauri"
 ]
 resolver = "2"
 
@@ -44,3 +47,6 @@ egui = "0.27"
 mime = "0.3"
 percent-encoding = "2"
 libc = "0.2"
+# API/Server stack
+axum = { version = "0.7" }
+# rspc/specta will be crate-local deps

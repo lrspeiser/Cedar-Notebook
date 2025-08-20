@@ -1,0 +1,11 @@
+[package]
+name = "notebook_tauri"
+version = "0.0.1"
+edition = "2021"
+license = "Apache-2.0"
+
+[dependencies]
+anyhow = { workspace = true }
+tracing = { workspace = true }
+# We will add tauri = "2" in a later step when wiring the actual adapter to avoid pulling heavy deps now.
+notebook_api = { path = "../notebook_api" }

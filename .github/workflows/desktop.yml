@@ -18,7 +18,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
       - name: Install deps
         working-directory: apps/desktop
-        run: npm ci
+        run: npm install
       - name: Build Tauri DMG
         working-directory: apps/desktop
         run: |

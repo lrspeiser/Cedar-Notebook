@@ -4,7 +4,7 @@ services:
     env: node
     rootDir: services/relay
     plan: free
-    buildCommand: tsc
+    buildCommand: npm ci && npm run build
     startCommand: node dist/server.js
     autoDeploy: true
     envVars:

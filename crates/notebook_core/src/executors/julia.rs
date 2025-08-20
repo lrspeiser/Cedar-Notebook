@@ -127,6 +127,44 @@ end
     };
 
     let ok = output.status.success();
+
+    // If we detect a Vega-Lite spec printed as PREVIEW_JSON with { "vega_lite_spec": {...} },
+    // persist it to a file and register in manifest so UIs render declaratively.
+    if let Some(pj) = &preview_json {
+        if let Some(spec) = pj.get("vega_lite_spec") {
+            let spec_path = workdir.join("vegalite_spec.json");
+            fs::write(&spec_path, serde_json::to_vec_pretty(spec)?)?;
+            let entry = crate::runs::ManifestEntry{
+                r#type: "vega_lite".into(),
+                path: "vegalite_spec.json".into(),
+                mime: "application/vnd.vegalite+json".into(),
+                title: pj.get("title").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                spec_path: Some("vegalite_spec.json".into()),
+                schema_path: None,
+                width: pj.get("width").and_then(|v| v.as_u64()).map(|n| n as u32),
+                height: pj.get("height").and_then(|v| v.as_u64()).map(|n| n as u32),
+                extra: None,
+            };
+            let _ = crate::runs::append_manifest(workdir, entry);
+        }
+    }
+
+    // Register table parquet as an artifact if present
+    if table.as_ref().and_then(|t| t.path.as_ref()).is_some() {
+        let entry = crate::runs::ManifestEntry{
+            r#type: "table_parquet".into(),
+            path: "result.parquet".into(),
+            mime: "application/parquet".into(),
+            title: Some("Result table".into()),
+            spec_path: None,
+            schema_path: None,
+            width: None,
+            height: None,
+            extra: None,
+        };
+        let _ = crate::runs::append_manifest(workdir, entry);
+    }
+
     Ok(ToolOutcome {
         ok,
         message: if ok { "Julia completed".into() } else { "Julia failed".into() },

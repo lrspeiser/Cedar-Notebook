@@ -881,13 +881,13 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "axum",
- "cedar-core",
  "clap",
  "directories",
  "dotenvy",
  "fs-err",
  "indicatif",
  "keyring",
+ "notebook_core",
  "reqwest",
  "serde",
  "serde_json",
@@ -900,43 +900,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "cedar-core"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "directories",
- "duckdb",
- "fs-err",
- "libc",
- "mime",
- "parking_lot",
- "percent-encoding",
- "rand 0.8.5",
- "regex",
- "reqwest",
- "serde",
- "serde_json",
- "serde_path_to_error",
- "serde_with",
- "thiserror",
- "tokio",
- "tracing",
- "tracing-appender",
- "tracing-subscriber",
- "uuid",
- "walkdir",
-]
-
-[[package]]
 name = "cedar-egui"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "cedar-core",
  "directories",
  "eframe",
  "egui",
+ "notebook_core",
  "serde_json",
  "walkdir",
 ]
@@ -2912,6 +2883,35 @@ dependencies = [
  "specta",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "notebook_core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "directories",
+ "duckdb",
+ "fs-err",
+ "libc",
+ "mime",
+ "parking_lot",
+ "percent-encoding",
+ "rand 0.8.5",
+ "regex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "serde_path_to_error",
+ "serde_with",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
+ "uuid",
+ "walkdir",
 ]
 
 [[package]]

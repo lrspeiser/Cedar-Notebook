@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "crates/cedar-core",
+"crates/notebook_core",
     "crates/cedar-cli",
     "apps/cedar-egui",
     "crates/cedar-smoke",

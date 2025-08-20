@@ -1,10 +1,10 @@
 use anyhow::{Result, Context};
 use clap::{Parser, Subcommand};
-use cedar_core::agent_loop::{agent_loop, AgentConfig};
-use cedar_core::runs::{create_new_run, list_runs};
-use cedar_core::util::{default_runs_root, env_flag};
-use cedar_core::executors::sql_duckdb::run_sql_to_parquet;
-use cedar_core::data::registry::DatasetRegistry;
+use notebook_core::agent_loop::{agent_loop, AgentConfig};
+use notebook_core::runs::{create_new_run, list_runs};
+use notebook_core::util::{default_runs_root, env_flag};
+use notebook_core::executors::sql_duckdb::run_sql_to_parquet;
+use notebook_core::data::registry::DatasetRegistry;
 use std::{path::{PathBuf, Path}, fs, io::Read};
 use tracing_subscriber::{EnvFilter, fmt};
 
@@ -219,7 +219,7 @@ println("```PREVIEW_JSON")
 println("{{\"summary\":\"Ingested file: {fname}\",\"columns\":", names(df), ",\"rows\":5}}")
 println("```")
 "#, file=file.display(), fname=fname);
-    let out = cedar_core::executors::julia::run_julia_cell(&run.dir, &code)?;
+    let out = notebook_core::executors::julia::run_julia_cell(&run.dir, &code)?;
     println!("{}", out.message);
     if let Some(table) = out.table {
         // Register under data/parquet/

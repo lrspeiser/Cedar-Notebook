@@ -107,7 +107,7 @@ fn write_card(run_dir: &Path, title: &str, summary: &str, details: serde_json::V
     Ok(())
 }
 
-async fn call_openai_for_decision(input: &CycleInput, cfg: &AgentConfig) -> Result<CycleDecision> {
+pub async fn call_openai_for_decision(input: &CycleInput, cfg: &AgentConfig) -> Result<CycleDecision> {
     // Use the Responses API with structured outputs. We send a compact transcript.
     // Determine base URL: prefer relay if configured
     let base = if let Some(relay) = &cfg.relay_url { relay.clone() } else { cfg.openai_base.clone().unwrap_or_else(|| "https://api.openai.com".into()) };

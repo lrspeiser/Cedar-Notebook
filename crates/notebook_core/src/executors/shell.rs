@@ -69,8 +69,28 @@ pub fn run_shell(workdir: &Path, cmd: &str, cwd: Option<&str>, timeout_secs: Opt
     let out_str = String::from_utf8_lossy(&output.stdout);
     let err_str = String::from_utf8_lossy(&output.stderr);
 
+    let ok = output.status.success();
+    // If the command generated common image outputs, register them (best-effort, non-fatal).
+    for name in ["plot.png", "plot.svg"] {
+        let p = exec_cwd.join(name);
+        if p.exists() {
+            let mime = if name.ends_with(".png") { "image/png" } else { "image/svg+xml" };
+            let entry = crate::runs::ManifestEntry{
+                r#type: "image".into(),
+                path: name.into(),
+                mime: mime.into(),
+                title: Some(format!("{}", name)),
+                spec_path: None,
+                schema_path: None,
+                width: None,
+                height: None,
+                extra: None,
+            };
+            let _ = crate::runs::append_manifest(workdir, entry);
+        }
+    }
     Ok(ToolOutcome {
-        ok: output.status.success(),
+        ok,
         message: format!("shell exited {}", output.status),
         preview_json: None,
         table: None,

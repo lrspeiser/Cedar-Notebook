@@ -55,6 +55,34 @@ async fn download_artifact(Path((run_id, file)): Path<(String, String)>) -> Resu
     ).into_response())
 }
 
+#[derive(Deserialize)]
+struct RunJuliaBody { code: String }
+
+async fn cmd_run_julia(Json(body): Json<RunJuliaBody>) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let run = notebook_core::runs::create_new_run(None).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let out = notebook_core::executors::julia::run_julia_cell(&run.dir, &body.code)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok(Json(serde_json::json!({
+        "run_id": run.id,
+        "message": out.message,
+        "ok": out.ok,
+    })))
+}
+
+#[derive(Deserialize)]
+struct RunShellBody { cmd: String, cwd: Option<String>, timeout_secs: Option<u64> }
+
+async fn cmd_run_shell(Json(body): Json<RunShellBody>) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let run = notebook_core::runs::create_new_run(None).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let out = notebook_core::executors::shell::run_shell(&run.dir, &body.cmd, body.cwd.as_deref(), body.timeout_secs)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok(Json(serde_json::json!({
+        "run_id": run.id,
+        "message": out.message,
+        "ok": out.ok,
+    })))
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
@@ -64,6 +92,9 @@ async fn main() -> anyhow::Result<()> {
         .route("/healthz", get(health))
         .route("/runs", get(list_runs))
         .route("/runs/:run_id/cards", get(list_cards))
+        // Commands (local-only semantics): run_julia, run_shell
+        .route("/commands/run_julia", axum::routing::post(cmd_run_julia))
+        .route("/commands/run_shell", axum::routing::post(cmd_run_shell))
         // Temporary artifact route: /artifacts/:run_id/:file (e.g., result.parquet, vegalite_spec.json)
         .route("/artifacts/:run_id/:file", get(download_artifact));
 

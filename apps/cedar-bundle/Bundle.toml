@@ -1,0 +1,37 @@
+# Bundle configuration for Cedar App
+# This creates a self-contained macOS app with both backend and frontend
+
+[package]
+name = "Cedar"
+identifier = "com.CedarAI.Cedar"
+version = "1.0.0"
+copyright = "Copyright (c) 2025 CedarAI"
+category = "Developer Tools"
+short_description = "AI-powered data and compute agent"
+long_description = """
+Cedar is an AI-powered agent that executes Julia code, runs shell commands, 
+and processes data using an LLM to interpret and respond to your queries.
+"""
+
+[package.metadata.bundle]
+name = "Cedar"
+identifier = "com.CedarAI.Cedar"
+icon = ["icons/icon.icns"]
+resources = [
+    "resources/",
+    "web-ui/"
+]
+
+[package.metadata.bundle.macos]
+frameworks = []
+minimum_system_version = "10.14"
+info_plist_entries = """
+<key>NSHighResolutionCapable</key>
+<true/>
+<key>CFBundleDisplayName</key>
+<string>Cedar</string>
+<key>LSApplicationCategoryType</key>
+<string>public.app-category.developer-tools</string>
+<key>NSAppleEventsUsageDescription</key>
+<string>Cedar needs to run commands and process data on your behalf.</string>
+"""

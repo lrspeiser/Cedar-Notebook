@@ -1,175 +1,92 @@
-use crate::executors::{TablePreview, ToolOutcome};
-use crate::util::{write_string};
-use anyhow::{Result, Context};
-use duckdb::{Connection};
-use regex::Regex;
-use std::{fs, path::{Path, PathBuf}, process::{Command, Stdio}, io::Read, time::Duration};
-use std::env;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
 
-fn julia_bin() -> String {
-    env::var("JULIA_BIN").unwrap_or_else(|_| "julia".to_string())
-}
-
-fn ensure_julia_env(root: &Path) -> Result<PathBuf> {
-    let env_dir = root.join(".cedar").join("julia_env");
-    fs::create_dir_all(&env_dir)?;
-    let project_toml = env_dir.join("Project.toml");
-    if !project_toml.exists() {
-        let mut project = String::from("[deps]\n");
-        // Minimal default environment; expanded as needed by user code
-        project.push_str("CSV = \"336ed68f-0bac-5ca0-87d4-7b16caf5d00b\"\n");
-        project.push_str("DataFrames = \"a93c6f00-e57d-5684-b7b6-d8193f3e46c0\"\n");
-        project.push_str("DuckDB = \"a29a1f8d-6c5c-4f0d-bb3e-8f3d1d1a2f9b\"\n");
-        project.push_str("Parquet = \"626c502c-15b0-58ad-a749-9eee5b4b9c8d\"\n");
-        project.push_str("JSON3 = \"0f8b85d8-7281-11e9-16c2-39a750bddbf1\"\n");
-        fs::write(&project_toml, project)?;
+    #[test]
+    fn test_run_julia_cell_simple() {
+        let dir = tempdir().unwrap();
+        let result = run_julia_cell(dir.path(), "println(\"hi from julia\")").unwrap();
+        assert!(result.ok);
+        assert_eq!(result.message.trim(), "hi from julia");
     }
-    Ok(env_dir)
 }
 
-fn tail(s: &str, n: usize) -> String {
-    let lines: Vec<&str> = s.lines().collect();
-    let start = lines.len().saturating_sub(n);
-    lines[start..].join("\n")
-}
+use std::{
+    fs,
+    io::{BufRead, BufReader},
+    path::Path,
+    process::{Child, Command, Stdio},
+    thread,
+};
+use tracing::{debug, info};
 
-pub fn run_julia_cell(workdir: &Path, code: &str) -> Result<ToolOutcome> {
-    fs::create_dir_all(workdir)?;
-    let env_dir = ensure_julia_env(&std::env::current_dir()?)?;
-    let cell_path = workdir.join("cell.jl");
-    write_string(&cell_path, code)?;
+use crate::executors::ToolOutcome;
 
-    let stdout_path = workdir.join("julia.stdout.txt");
-    let stderr_path = workdir.join("julia.stderr.txt");
 
-    // Build wrapper script that activates env and runs the cell
-    let wrapper = format!(r#"
-import Pkg
-# Unconditionally activate the provided project
-Pkg.activate(raw"{proj}")
-@info "Activated project" pkg_project=Base.active_project()
-try
-    include(raw"{cell}")
-catch e
-    @error "Cell errored" exception=(e, catch_backtrace())
-    rethrow()
-end
-"#, proj=env_dir.display(), cell=cell_path.display());
-    let wrapper_path = workdir.join("run_cell.jl");
-    write_string(&wrapper_path, &wrapper)?;
-
-    let mut cmd = Command::new(julia_bin());
-    cmd.arg("--project").arg(&env_dir);
-    cmd.env("JULIA_PROJECT", &env_dir);
-    cmd.arg(wrapper_path.as_os_str());
-    cmd.current_dir(workdir);
-    cmd.stdout(Stdio::piped());
-    cmd.stderr(Stdio::piped());
-
-    let mut child = cmd.spawn().with_context(|| "Failed to spawn Julia")?;
-    let output = child.wait_with_output().with_context(|| "Failed to wait for Julia")?;
-    fs::write(&stdout_path, &output.stdout)?;
-    fs::write(&stderr_path, &output.stderr)?;
-
-    let mut preview_json: Option<serde_json::Value> = None;
-    let out_str = String::from_utf8_lossy(&output.stdout);
-    let err_str = String::from_utf8_lossy(&output.stderr);
-
-    // Extract PREVIEW_JSON block
-    let re = Regex::new(r"(?s)```PREVIEW_JSON\s*(\{.*?\})\s*```").unwrap();
-    if let Some(cap) = re.captures(&out_str) {
-        if let Some(m) = cap.get(1) {
-            match serde_json::from_str::<serde_json::Value>(m.as_str()) {
-                Ok(v) => preview_json = Some(v),
-                Err(_) => {}
+fn spawn_log_threads(child: &mut Child) -> (thread::JoinHandle<String>, thread::JoinHandle<String>) {
+    let out_handle = {
+        let stdout = child.stdout.take();
+        thread::spawn(move || {
+            let mut buf = String::new();
+            if let Some(stdout) = stdout {
+                let reader = BufReader::new(stdout);
+                for line in reader.lines().flatten() {
+                    let line = line.trim_end_matches(&['\r', '\n'][..]).to_string();
+                    tracing::info!(target = "exec::stdout", "{line}");
+                    buf.push_str(&line);
+                    buf.push('\n');
+                }
             }
-        }
-    }
-
-    // If result.parquet exists, build a small preview with DuckDB
-    let parquet_path = workdir.join("result.parquet");
-    let table = if parquet_path.exists() {
-        // Use DuckDB to preview first 10 rows and schema
-        let conn = Connection::open_in_memory()?;
-        let sql = format!("SELECT * FROM read_parquet('{}') LIMIT 10", parquet_path.display());
-        let mut stmt = conn.prepare(&sql)?;
-        let mut rows_iter = stmt.query([])?;
-        let mut rows_json = vec![];
-        while let Some(row) = rows_iter.next()? {
-            let mut obj = serde_json::Map::new();
-            for (i, name) in row.as_ref().column_names().iter().enumerate() {
-                let name = (*name).to_string();
-                // Very simple type mapping for preview
-                let v = row.get_ref(i)?;
-                let vj = match v {
-                    duckdb::types::ValueRef::Null => serde_json::Value::Null,
-                    duckdb::types::ValueRef::Text(s) => String::from_utf8_lossy(s).to_string().into(),
-                    _ => serde_json::Value::String(format!("{:?}", v)),
-                };
-                obj.insert(name, vj);
-            }
-            rows_json.push(serde_json::Value::Object(obj));
-        }
-        // Get schema
-        let mut schema = vec![];
-        for name in stmt.column_names() {
-            schema.push((name.to_string(), "unknown".to_string()));
-        }
-        Some(TablePreview {
-            schema,
-            rows: rows_json,
-            row_count: 0,
-            path: Some(parquet_path.to_string_lossy().to_string()),
+            buf
         })
-    } else {
-        None
     };
+    let err_handle = {
+        let stderr = child.stderr.take();
+        thread::spawn(move || {
+            let mut buf = String::new();
+            if let Some(stderr) = stderr {
+                let reader = BufReader::new(stderr);
+                for line in reader.lines().flatten() {
+                    let line = line.trim_end_matches(&['\r', '\n'][..]).to_string();
+                    tracing::warn!(target = "exec::stderr", "{line}");
+                    buf.push_str(&line);
+                    buf.push('\n');
+                }
+            }
+            buf
+        })
+    };
+    (out_handle, err_handle)
+}
 
-    let ok = output.status.success();
+#[tracing::instrument(skip_all, fields(run_dir = %run_dir.display()))]
+pub fn run_julia_cell(run_dir: &Path, code: &str) -> anyhow::Result<ToolOutcome> {
+    // Write a temporary script; if you already do this differently, keep your path.
+    let script_path = run_dir.join("cell.jl");
+    fs::write(&script_path, code)?;
+    debug!(script = %script_path.display(), "wrote Julia cell");
 
-    // If we detect a Vega-Lite spec printed as PREVIEW_JSON with { "vega_lite_spec": {...} },
-    // persist it to a file and register in manifest so UIs render declaratively.
-    if let Some(pj) = &preview_json {
-        if let Some(spec) = pj.get("vega_lite_spec") {
-            let spec_path = workdir.join("vegalite_spec.json");
-            fs::write(&spec_path, serde_json::to_vec_pretty(spec)?)?;
-            let entry = crate::runs::ManifestEntry{
-                r#type: "vega_lite".into(),
-                path: "vegalite_spec.json".into(),
-                mime: "application/vnd.vegalite+json".into(),
-                title: pj.get("title").and_then(|v| v.as_str()).map(|s| s.to_string()),
-                spec_path: Some("vegalite_spec.json".into()),
-                schema_path: None,
-                width: pj.get("width").and_then(|v| v.as_u64()).map(|n| n as u32),
-                height: pj.get("height").and_then(|v| v.as_u64()).map(|n| n as u32),
-                extra: None,
-            };
-            let _ = crate::runs::append_manifest(workdir, entry);
-        }
-    }
+    // Prefer passing the file path directly to Julia.
+    let mut cmd = Command::new("julia");
+    cmd.arg("--project")
+        .arg(script_path.as_os_str())
+        .current_dir(run_dir)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
 
-    // Register table parquet as an artifact if present
-    if table.as_ref().and_then(|t| t.path.as_ref()).is_some() {
-        let entry = crate::runs::ManifestEntry{
-            r#type: "table_parquet".into(),
-            path: "result.parquet".into(),
-            mime: "application/parquet".into(),
-            title: Some("Result table".into()),
-            spec_path: None,
-            schema_path: None,
-            width: None,
-            height: None,
-            extra: None,
-        };
-        let _ = crate::runs::append_manifest(workdir, entry);
-    }
+    info!("spawning julia");
+    let mut child = cmd.spawn().map_err(|e| anyhow::anyhow!("spawn failed: {e}"))?;
+    let (t_out, t_err) = spawn_log_threads(&mut child);
+
+    let status = child.wait().map_err(|e| anyhow::anyhow!("wait failed: {e}"))?;
+    let out = t_out.join().unwrap_or_default();
+    let err = t_err.join().unwrap_or_default();
+    let ok = status.success();
 
     Ok(ToolOutcome {
         ok,
-        message: if ok { "Julia completed".into() } else { "Julia failed".into() },
-        preview_json,
-        table,
-        stdout_tail: Some(tail(&out_str, 80)),
-        stderr_tail: Some(tail(&err_str, 80)),
+        message: if err.is_empty() { out } else { format!("{out}\n{err}") },
+        ..Default::default()
     })
 }

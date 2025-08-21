@@ -1,13 +1,12 @@
-use crate::llm_protocol::{CycleDecision, CycleInput, TranscriptItem, decision_json_schema, system_prompt};
+use crate::llm_protocol::{CycleDecision, CycleInput, TranscriptItem, system_prompt};
 use crate::executors::{julia::run_julia_cell, shell::run_shell, ToolOutcome};
 use crate::cards::AssistantCard;
 use crate::util::{env_flag};
 use anyhow::{Result, Context};
 use chrono::Utc;
 use serde_json::json;
-use std::{path::{Path, PathBuf}, fs};
+use std::{path::Path, fs};
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
-use uuid::Uuid;
 
 #[derive(Debug, Clone)]
 pub struct AgentConfig {
@@ -20,6 +19,7 @@ pub struct AgentConfig {
     pub app_shared_token: Option<String>,
 }
 
+#[tracing::instrument(skip_all, fields(run_id = %run_dir.file_name().unwrap().to_str().unwrap(), user_prompt = %user_prompt))]
 pub async fn agent_loop(run_dir: &Path, user_prompt: &str, max_turns: usize, cfg: AgentConfig) -> Result<()> {
     fs::create_dir_all(run_dir)?;
     let mut transcript: Vec<TranscriptItem> = vec![TranscriptItem{ role: "user".into(), content: user_prompt.into() }];

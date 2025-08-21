@@ -9,13 +9,13 @@ anyhow = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
-specta = { version = "1" }
+specta = { version = "2.0.0-rc.20" }
 rspc = { version = "0.3" }
 notebook_core = { path = "../notebook_core" }
 
 [dev-dependencies]
 tokio = { workspace = true }
 
-[[bin]]
-name = "export_types"
-path = "src/bin/export_types.rs"
+# [[bin]]
+# name = "export_types"
+# path = "src/bin/export_types.rs"

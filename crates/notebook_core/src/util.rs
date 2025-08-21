@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use directories::ProjectDirs;
 use std::{env, fs, path::{Path, PathBuf}};
 use uuid::Uuid;
@@ -8,6 +8,14 @@ pub fn app_dirs() -> Result<ProjectDirs> {
 }
 
 pub fn default_runs_root() -> Result<PathBuf> {
+    // Check for environment variable override first
+    if let Ok(custom_dir) = env::var("CEDAR_RUNS_DIR") {
+        let root = PathBuf::from(custom_dir);
+        fs::create_dir_all(&root)?;
+        return Ok(root);
+    }
+    
+    // Fall back to default location
     let pd = app_dirs()?;
     let root = pd.data_dir().join("runs");
     fs::create_dir_all(&root)?;

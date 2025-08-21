@@ -1,3 +1,4 @@
+
 pub mod julia;
 pub mod shell;
 pub mod sql_duckdb;
@@ -12,7 +13,7 @@ pub struct TablePreview {
     pub path: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ToolOutcome {
     pub ok: bool,
     pub message: String,

@@ -1,14 +1,12 @@
 import React, { useState } from 'react'
-
-const SERVER = (import.meta as any).env?.VITE_SERVER_URL || 'http://127.0.0.1:8080'
-
+import { invoke } from '@tauri-apps/api/tauri'
 
 export default function App() {
   const [prompt, setPrompt] = useState('')
-  const [status, setStatus] = useState<string>('')
-  const [log, setLog] = useState<string>('')
-  const [finalMessage, setFinalMessage] = useState<string>('')
-  const [runId, setRunId] = useState<string>('')
+  const [status, setStatus] = useState('')
+  const [log, setLog] = useState('')
+  const [finalMessage, setFinalMessage] = useState('')
+  const [runId, setRunId] = useState('')
 
   async function submit() {
     setStatus('Submitting...')
@@ -16,20 +14,11 @@ export default function App() {
     setFinalMessage('')
     setRunId('')
     try {
-      const url = `${SERVER}/commands/submit_query`
-      setLog(`POST ${url}`)
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ prompt })
-      })
-      if (!res.ok) {
-        const txt = await res.text()
-        throw new Error(`Server error: ${res.status} ${txt}`)
-      }
-      const data = await res.json()
-      setRunId(data.run_id || '')
-      setFinalMessage(data.final_message || '(no final message)')
+      const data = await invoke<{ 
+        run_id?: string; final_message?: string; 
+      }>('cmd_submit_query', { body: { prompt } })   // ← matches #[tauri::command]
+      setRunId(data.run_id ?? '')
+      setFinalMessage(data.final_message ?? '(no final message)')
       setStatus('Done')
     } catch (e: any) {
       setStatus(`Error: ${e?.message || String(e)}`)
@@ -37,7 +26,8 @@ export default function App() {
     }
   }
 
-  return (
+  // … render stays the same
+}
     <div style={{ fontFamily: 'sans-serif', padding: 16 }}>
       <h1>Cedar Desktop (MVP)</h1>
       <p>Ask a question. The backend runs the agent loop and returns the final response.</p>

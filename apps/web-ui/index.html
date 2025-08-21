@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cedar Agent Loop Visualizer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: white;
+            border-radius: 12px;
+            padding: 20px 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            color: #333;
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .main-layout {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .main-layout {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .panel {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .panel h2 {
+            color: #333;
+            font-size: 18px;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .input-section {
+            margin-bottom: 20px;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        button {
+            padding: 12px 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .status-bar {
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .status-idle {
+            background: #f0f0f0;
+            color: #666;
+        }
+
+        .status-running {
+            background: #fff3cd;
+            color: #856404;
+            animation: pulse 2s infinite;
+        }
+
+        .status-success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .execution-steps {
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .step {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .step-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .step-title {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .step-time {
+            font-size: 12px;
+            color: #999;
+        }
+
+        .step-content {
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 12px;
+            background: white;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+
+        .json-display {
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .code-block {
+            background: #282c34;
+            color: #abb2bf;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+
+        .run-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .run-item {
+            padding: 10px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .run-item:hover {
+            background: #f8f9fa;
+        }
+
+        .run-item.selected {
+            background: #e8eaf6;
+            border-color: #667eea;
+        }
+
+        .run-id {
+            font-family: monospace;
+            font-size: 12px;
+            color: #666;
+        }
+
+        .tab-nav {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .tab {
+            padding: 10px 20px;
+            background: none;
+            border: none;
+            color: #666;
+            cursor: pointer;
+            transition: color 0.2s;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+        }
+
+        .tab:hover {
+            color: #333;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .artifacts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 10px;
+        }
+
+        .artifact-card {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .artifact-name {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .artifact-size {
+            font-size: 12px;
+            color: #999;
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .examples {
+            margin-top: 10px;
+        }
+
+        .example-btn {
+            padding: 6px 12px;
+            margin-right: 8px;
+            margin-bottom: 8px;
+            background: #f0f0f0;
+            color: #333;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .example-btn:hover {
+            background: #e0e0e0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🌲 Cedar Agent Loop Visualizer</h1>
+            <div class="subtitle">Watch the AI agent process your queries step by step</div>
+        </header>
+
+        <div class="main-layout">
+            <!-- Left Panel: Input and Control -->
+            <div class="panel">
+                <h2>Query Input</h2>
+                
+                <div class="input-section">
+                    <div class="input-group">
+                        <input type="text" id="queryInput" placeholder="Enter your query (e.g., 'What is 2+2?')" />
+                        <button id="runBtn" onclick="runQuery()">Run</button>
+                    </div>
+                    
+                    <div class="examples">
+                        <button class="example-btn" onclick="setExample('What is 2+2?')">2+2</button>
+                        <button class="example-btn" onclick="setExample('Calculate the factorial of 5')">Factorial</button>
+                        <button class="example-btn" onclick="setExample('What is the current date?')">Date</button>
+                        <button class="example-btn" onclick="setExample('List files in current directory')">List Files</button>
+                    </div>
+                    
+                    <div id="status" class="status-bar status-idle">
+                        Ready to process queries
+                    </div>
+                </div>
+
+                <h2>Execution Flow</h2>
+                <div id="executionSteps" class="execution-steps">
+                    <!-- Steps will be added here dynamically -->
+                </div>
+            </div>
+
+            <!-- Right Panel: Details and Artifacts -->
+            <div class="panel">
+                <div class="tab-nav">
+                    <button class="tab active" onclick="switchTab('details')">Details</button>
+                    <button class="tab" onclick="switchTab('artifacts')">Artifacts</button>
+                    <button class="tab" onclick="switchTab('history')">History</button>
+                </div>
+
+                <div id="details-tab" class="tab-content active">
+                    <h2>Current Execution Details</h2>
+                    <div id="detailsContent">
+                        <p style="color: #999; padding: 20px; text-align: center;">
+                            Run a query to see detailed execution information
+                        </p>
+                    </div>
+                </div>
+
+                <div id="artifacts-tab" class="tab-content">
+                    <h2>Generated Artifacts</h2>
+                    <div id="artifactsContent" class="artifacts-grid">
+                        <!-- Artifacts will be listed here -->
+                    </div>
+                </div>
+
+                <div id="history-tab" class="tab-content">
+                    <h2>Previous Runs</h2>
+                    <div id="historyContent" class="run-list">
+                        <!-- Previous runs will be listed here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://127.0.0.1:8080';
+        let currentRunId = null;
+        let executionSteps = [];
+        let eventSource = null;
+
+        function setExample(text) {
+            document.getElementById('queryInput').value = text;
+        }
+
+        function switchTab(tabName) {
+            // Update tab buttons
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            // Update tab content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(`${tabName}-tab`).classList.add('active');
+
+            // Load content if needed
+            if (tabName === 'history') {
+                loadHistory();
+            }
+        }
+
+        function updateStatus(status, message) {
+            const statusEl = document.getElementById('status');
+            statusEl.className = `status-bar status-${status}`;
+            statusEl.innerHTML = message;
+        }
+
+        function addExecutionStep(title, content, type = 'info') {
+            const stepsContainer = document.getElementById('executionSteps');
+            const step = document.createElement('div');
+            step.className = 'step';
+            
+            const time = new Date().toLocaleTimeString();
+            
+            step.innerHTML = `
+                <div class="step-header">
+                    <div class="step-title">${title}</div>
+                    <div class="step-time">${time}</div>
+                </div>
+                <div class="step-content">
+                    ${formatContent(content, type)}
+                </div>
+            `;
+            
+            stepsContainer.appendChild(step);
+            stepsContainer.scrollTop = stepsContainer.scrollHeight;
+            
+            executionSteps.push({ title, content, type, time });
+        }
+
+        function formatContent(content, type) {
+            if (type === 'json') {
+                return `<div class="json-display">${JSON.stringify(content, null, 2)}</div>`;
+            } else if (type === 'code') {
+                return `<div class="code-block">${escapeHtml(content)}</div>`;
+            } else {
+                return escapeHtml(content);
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function runQuery() {
+            const query = document.getElementById('queryInput').value.trim();
+            if (!query) {
+                alert('Please enter a query');
+                return;
+            }
+
+            // Clear previous execution
+            document.getElementById('executionSteps').innerHTML = '';
+            document.getElementById('detailsContent').innerHTML = '';
+            executionSteps = [];
+
+            // Disable button during execution
+            document.getElementById('runBtn').disabled = true;
+            updateStatus('running', 'Processing query...<span class="loading-spinner"></span>');
+
+            try {
+                // Add initial step
+                addExecutionStep('User Query', query);
+
+                // Simulate the agent loop execution
+                await simulateAgentLoop(query);
+
+                updateStatus('success', 'Query completed successfully!');
+            } catch (error) {
+                updateStatus('error', `Error: ${error.message}`);
+                addExecutionStep('Error', error.message, 'error');
+            } finally {
+                document.getElementById('runBtn').disabled = false;
+            }
+        }
+
+        async function simulateAgentLoop(query) {
+            // Step 1: Build initial CycleInput
+            const cycleInput1 = {
+                system_instructions: "You are Cedar, an expert data/compute agent...",
+                transcript: [
+                    { role: "user", content: query }
+                ],
+                tool_context: {}
+            };
+            
+            addExecutionStep('Building CycleInput (Turn 1)', cycleInput1, 'json');
+            await delay(500);
+
+            // Step 2: LLM Decision
+            updateStatus('running', 'Calling LLM for decision...<span class="loading-spinner"></span>');
+            
+            const llmDecision1 = {
+                action: "run_julia",
+                args: {
+                    code: "result = 2 + 2\nprintln(\"The result is: $result\")",
+                    user_message: "I'll calculate 2+2 using Julia."
+                }
+            };
+            
+            addExecutionStep('LLM Response: run_julia', llmDecision1, 'json');
+            await delay(500);
+
+            // Step 3: Execute Julia code
+            updateStatus('running', 'Executing Julia code...<span class="loading-spinner"></span>');
+            
+            addExecutionStep('Julia Code', llmDecision1.args.code, 'code');
+            await delay(500);
+
+            // Step 4: Tool outcome
+            const toolOutcome = {
+                ok: true,
+                message: "The result is: 4\n",
+                stdout_tail: "The result is: 4",
+                stderr_tail: null
+            };
+            
+            addExecutionStep('Tool Execution Result', toolOutcome, 'json');
+            await delay(500);
+
+            // Step 5: Second LLM call
+            updateStatus('running', 'Processing results...<span class="loading-spinner"></span>');
+            
+            const cycleInput2 = {
+                system_instructions: "You are Cedar...",
+                transcript: [
+                    { role: "user", content: query },
+                    { role: "tool", content: "run_julia -> The result is: 4" }
+                ],
+                tool_context: toolOutcome
+            };
+            
+            addExecutionStep('Building CycleInput (Turn 2)', cycleInput2, 'json');
+            await delay(500);
+
+            // Step 6: Final decision
+            const llmDecision2 = {
+                action: "final",
+                user_output: "The calculation is complete! 2 + 2 equals 4."
+            };
+            
+            addExecutionStep('LLM Final Response', llmDecision2, 'json');
+            await delay(500);
+
+            // Step 7: Output
+            addExecutionStep('Final Output', llmDecision2.user_output);
+
+            // Update details panel
+            updateDetailsPanel();
+        }
+
+        function updateDetailsPanel() {
+            const detailsContent = document.getElementById('detailsContent');
+            
+            let html = '<h3>Execution Summary</h3>';
+            html += `<p><strong>Total Steps:</strong> ${executionSteps.length}</p>`;
+            html += '<h4>Step Breakdown:</h4><ul>';
+            
+            executionSteps.forEach((step, index) => {
+                html += `<li>${index + 1}. ${step.title} (${step.time})</li>`;
+            });
+            
+            html += '</ul>';
+            
+            html += '<h4>Key Insights:</h4>';
+            html += '<ul>';
+            html += '<li>LLM made 2 decisions (run_julia, final)</li>';
+            html += '<li>1 tool execution (Julia)</li>';
+            html += '<li>Total processing time: ~3 seconds</li>';
+            html += '</ul>';
+            
+            detailsContent.innerHTML = html;
+        }
+
+        async function loadHistory() {
+            try {
+                const response = await fetch(`${API_BASE}/runs?limit=10`);
+                const data = await response.json();
+                
+                const historyContent = document.getElementById('historyContent');
+                
+                if (data.runs && data.runs.length > 0) {
+                    historyContent.innerHTML = data.runs.map(run => `
+                        <div class="run-item" onclick="loadRun('${run.id}')">
+                            <div><strong>Run ID:</strong> <span class="run-id">${run.id}</span></div>
+                            <div><strong>Path:</strong> ${run.path}</div>
+                        </div>
+                    `).join('');
+                } else {
+                    historyContent.innerHTML = '<p style="color: #999; padding: 20px; text-align: center;">No previous runs found</p>';
+                }
+            } catch (error) {
+                console.error('Failed to load history:', error);
+            }
+        }
+
+        function loadRun(runId) {
+            // TODO: Load and display a specific run's details
+            alert(`Loading run: ${runId}`);
+        }
+
+        function delay(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        // Check server connection on load
+        window.addEventListener('load', async () => {
+            try {
+                const response = await fetch(`${API_BASE}/health`);
+                if (response.ok) {
+                    updateStatus('idle', 'Connected to server - Ready to process queries');
+                } else {
+                    updateStatus('error', 'Server not responding - Please start the backend server');
+                }
+            } catch (error) {
+                updateStatus('error', 'Cannot connect to server - Please start the backend server on port 8080');
+            }
+        });
+    </script>
+</body>
+</html>

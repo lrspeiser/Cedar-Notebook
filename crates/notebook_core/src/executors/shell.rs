@@ -1,134 +1,148 @@
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_run_shell_simple() {
+        let dir = tempdir().unwrap();
+        let result = run_shell(dir.path(), "echo hello", None, None).unwrap();
+        assert!(result.ok);
+        assert_eq!(result.message.trim(), "hello");
+    }
+
+    #[test]
+    fn test_run_shell_stderr() {
+        let dir = tempdir().unwrap();
+        let result = run_shell(dir.path(), ">&2 echo hello", None, None).unwrap();
+        assert!(result.ok);
+        assert_eq!(result.message.trim(), "hello");
+    }
+
+    #[test]
+    fn test_run_shell_timeout() {
+        let dir = tempdir().unwrap();
+        let result = run_shell(dir.path(), "sleep 5", None, Some(1)).unwrap();
+        assert!(!result.ok);
+        assert!(result.message.contains("Timed out"));
+    }
+}
+
+use std::{
+    io::{BufRead, BufReader},
+    path::{Path, PathBuf},
+    process::{Child, Command, Stdio},
+    thread,
+    time::Duration,
+};
+use tracing::{debug, info, warn};
+use wait_timeout::ChildExt;
+
 use crate::executors::ToolOutcome;
-use crate::util::{is_path_within};
-use anyhow::{Result, bail, Context};
-use std::{path::{Path, PathBuf}, process::{Command, Stdio}, fs, time::Duration};
 
-fn allowed_prefixes() -> &'static [&'static str] {
-    &["cargo", "git", "python", "julia", "rg", "ls", "dir", "echo", "cat", "pwd"]
-}
-
-fn is_allowed(cmd: &str) -> bool {
-    let trimmed = cmd.trim_start();
-    allowed_prefixes().iter().any(|p| trimmed.starts_with(p))
-}
-
-fn tail(s: &str, n: usize) -> String {
-    let lines: Vec<&str> = s.lines().collect();
-    let start = lines.len().saturating_sub(n);
-    lines[start..].join("\n")
-}
-
-pub fn run_shell(workdir: &Path, cmd: &str, cwd: Option<&str>, timeout_secs: Option<u64>) -> Result<ToolOutcome> {
-    if !is_allowed(cmd) {
-        bail!("Command rejected by allowlist");
-    }
-    let exec_cwd = if let Some(cwd) = cwd {
-        let p = PathBuf::from(cwd);
-        if !is_path_within(workdir, &p) { bail!("cwd escapes workdir"); }
-        p
-    } else {
-        workdir.to_path_buf()
+fn spawn_log_threads(child: &mut Child) -> (thread::JoinHandle<String>, thread::JoinHandle<String>) {
+    // stdout
+    let out_handle = {
+        let stdout = child.stdout.take();
+        thread::spawn(move || {
+            let mut buf = String::new();
+            if let Some(stdout) = stdout {
+                let reader = BufReader::new(stdout);
+                for line in reader.lines().flatten() {
+                    let line = line.trim_end_matches(&['\r', '\n'][..]).to_string();
+                    tracing::info!(target = "exec::stdout", "{line}");
+                    buf.push_str(&line);
+                    buf.push('\n');
+                }
+            }
+            buf
+        })
     };
-    fs::create_dir_all(&exec_cwd)?;
 
-    let stdout_path = workdir.join("shell.stdout.txt");
-    let stderr_path = workdir.join("shell.stderr.txt");
+    // stderr
+    let err_handle = {
+        let stderr = child.stderr.take();
+        thread::spawn(move || {
+            let mut buf = String::new();
+            if let Some(stderr) = stderr {
+                let reader = BufReader::new(stderr);
+                for line in reader.lines().flatten() {
+                    let line = line.trim_end_matches(&['\r', '\n'][..]).to_string();
+                    tracing::warn!(target = "exec::stderr", "{line}");
+                    buf.push_str(&line);
+                    buf.push('\n');
+                }
+            }
+            buf
+        })
+    };
 
-    #[cfg(target_os="windows")]
-    let mut command = {
+    (out_handle, err_handle)
+}
+
+#[tracing::instrument(
+    skip_all,
+    fields(run_dir = %run_dir.display(), cmd = %cmdline, cwd = ?cwd, timeout = ?timeout_secs)
+)]
+pub fn run_shell(
+    run_dir: &Path,
+    cmdline: &str,
+    cwd: Option<&str>,
+    timeout_secs: Option<u64>,
+) -> anyhow::Result<ToolOutcome> {
+    // Cross-platform shell launcher
+    #[cfg(target_os = "windows")]
+    let mut cmd = {
         let mut c = Command::new("cmd");
-        c.arg("/C").arg(cmd);
+        c.args(["/C", cmdline]);
         c
     };
-
-    #[cfg(not(target_os="windows"))]
-    let mut command = {
+    #[cfg(not(target_os = "windows"))]
+    let mut cmd = {
         let mut c = Command::new("bash");
-        c.arg("-lc").arg(cmd);
+        c.args(["-lc", cmdline]);
         c
     };
 
-    command.current_dir(&exec_cwd);
-    command.stdout(Stdio::piped());
-    command.stderr(Stdio::piped());
+    let workdir = cwd.map(PathBuf::from).unwrap_or_else(|| run_dir.to_path_buf());
+    debug!(workdir = %workdir.display(), "preparing shell command");
+    cmd.current_dir(workdir)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
 
-    let child = command.spawn().with_context(|| "Failed to spawn shell")?;
-    let output = if let Some(secs) = timeout_secs {
-        match child.wait_with_output_timeout(Duration::from_secs(secs)) {
-            Ok(Some(out)) => out,
-            Ok(None) => bail!("Timed out"),
-            Err(e) => bail!("Failed waiting for process: {}", e),
+    info!("spawning shell command");
+    let mut child = cmd.spawn().map_err(|e| anyhow::anyhow!("spawn failed: {e}"))?;
+    let (t_out, t_err) = spawn_log_threads(&mut child);
+
+    // Wait with optional timeout
+    let status = if let Some(secs) = timeout_secs {
+        let dur = Duration::from_secs(secs);
+        match child.wait_timeout(dur).map_err(|e| anyhow::anyhow!(e))? {
+            Some(status) => status,
+            None => {
+                warn!("timeout after {secs}s; terminating process");
+                let _ = child.kill();
+                let _ = child.wait();
+                let out = t_out.join().unwrap_or_default();
+                let err = t_err.join().unwrap_or_default();
+                return Ok(ToolOutcome {
+                    ok: false,
+                    message: format!("Timed out after {secs}s\n{out}{err}"),
+                    ..Default::default()
+                });
+            }
         }
     } else {
-        child.wait_with_output().with_context(|| "Failed to wait for shell")?
+        child.wait().map_err(|e| anyhow::anyhow!("wait failed: {e}"))?
     };
 
-    fs::write(&stdout_path, &output.stdout)?;
-    fs::write(&stderr_path, &output.stderr)?;
+    let out = t_out.join().unwrap_or_default();
+    let err = t_err.join().unwrap_or_default();
+    let ok = status.success();
 
-    let out_str = String::from_utf8_lossy(&output.stdout);
-    let err_str = String::from_utf8_lossy(&output.stderr);
-
-    let ok = output.status.success();
-    // If the command generated common image outputs, register them (best-effort, non-fatal).
-    for name in ["plot.png", "plot.svg"] {
-        let p = exec_cwd.join(name);
-        if p.exists() {
-            let mime = if name.ends_with(".png") { "image/png" } else { "image/svg+xml" };
-            let entry = crate::runs::ManifestEntry{
-                r#type: "image".into(),
-                path: name.into(),
-                mime: mime.into(),
-                title: Some(format!("{}", name)),
-                spec_path: None,
-                schema_path: None,
-                width: None,
-                height: None,
-                extra: None,
-            };
-            let _ = crate::runs::append_manifest(workdir, entry);
-        }
-    }
     Ok(ToolOutcome {
         ok,
-        message: format!("shell exited {}", output.status),
-        preview_json: None,
-        table: None,
-        stdout_tail: Some(tail(&out_str, 120)),
-        stderr_tail: Some(tail(&err_str, 120)),
+        message: if err.is_empty() { out } else { format!("{out}\n{err}") },
+        ..Default::default()
     })
-}
-
-// Small helper to add timeout support on stable without external crates
-trait WaitTimeout {
-    fn wait_with_output_timeout(self, dur: Duration) -> std::io::Result<Option<std::process::Output>>;
-}
-impl WaitTimeout for std::process::Child {
-    fn wait_with_output_timeout(mut self, dur: Duration) -> std::io::Result<Option<std::process::Output>> {
-        use std::thread;
-        use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
-        let done = Arc::new(AtomicBool::new(false));
-        let done2 = done.clone();
-        let id = self.id();
-        let handle = thread::spawn(move || {
-            let out = self.wait_with_output();
-            done2.store(true, Ordering::SeqCst);
-            out
-        });
-        let start = std::time::Instant::now();
-        loop {
-            if done.load(Ordering::SeqCst) {
-                return handle.join().unwrap().map(Some);
-            }
-            if start.elapsed() > dur {
-                // Best effort kill
-                #[cfg(unix)]
-                unsafe { libc::kill(id as i32, libc::SIGKILL); }
-                #[cfg(windows)]
-                { /* process will exit shortly */ }
-                return Ok(None);
-            }
-            thread::sleep(std::time::Duration::from_millis(50));
-        }
-    }
 }

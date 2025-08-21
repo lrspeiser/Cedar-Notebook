@@ -1,5 +1,5 @@
 use crate::executors::{TablePreview, ToolOutcome};
-use anyhow::{Result, Context};
+use anyhow::Result;
 use duckdb::Connection;
 use std::{path::Path};
 

@@ -1,12 +1,27 @@
 use std::process::Command;
 use std::time::Duration;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::env;
 use std::net::TcpListener;
+
+// macOS-specific imports for app activation
+#[cfg(target_os = "macos")]
+use cocoa::appkit::{NSApp, NSApplication, NSApplicationActivationPolicy};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🌲 Cedar Agent Starting...");
+    
+    // Set up macOS app activation to stop dock bouncing
+    #[cfg(target_os = "macos")]
+    unsafe {
+        let app = NSApp();
+        app.setActivationPolicy_(NSApplicationActivationPolicy::NSApplicationActivationPolicyRegular);
+        // Activate the app and mark it as finished launching
+        app.activateIgnoringOtherApps_(cocoa::base::YES);
+        // Tell macOS we're done launching to stop the bouncing
+        app.finishLaunching();
+    }
     
     // Set up embedded Julia environment if running from app bundle
     setup_embedded_julia();

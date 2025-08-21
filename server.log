@@ -1,58 +1,29 @@
+warning: unused import: `params`
+ --> crates/notebook_core/src/duckdb_metadata.rs:2:26
+  |
+2 | use duckdb::{Connection, params};
+  |                          ^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: `notebook_core` (lib) generated 1 warning (run `cargo fix --lib -p notebook_core` to apply 1 suggestion)
    Compiling notebook_server v0.0.1 (/Users/leonardspeiser/Projects/cedarcli/crates/notebook_server)
-    Finished `release` profile [optimized] target(s) in 3.61s
-     Running `target/release/notebook_server`
-[2m2025-08-21T05:41:53.801675Z[0m [32m INFO[0m [2mnotebook_server[0m[2m:[0m Starting server on 127.0.0.1:8080
-Calculating the result of 2+2 using Julia.
-[2m2025-08-21T06:03:40.176186Z[0m [32m INFO[0m [1magent_loop[0m[1m{[0m[3mrun_id[0m[2m=[0m4d673452-d34b-4412-9db6-5f7e36d4ffdc [3muser_prompt[0m[2m=[0mUser: What is 2+2?
-[1m}[0m[2m:[0m[1mrun_julia_cell[0m[1m{[0m[3mrun_dir[0m[2m=[0m/Users/leonardspeiser/Library/Application Support/com.CedarAI.CedarAI/runs/4d673452-d34b-4412-9db6-5f7e36d4ffdc[1m}[0m[2m:[0m [2mnotebook_core::executors::julia[0m[2m:[0m spawning julia
-[2m2025-08-21T06:03:40.683946Z[0m [32m INFO[0m [2mnotebook_core::executors::julia[0m[2m:[0m Result: 4 [3mtarget[0m[2m=[0m"exec::stdout"
-The result of 2+2 is 4.
-Calculating the length of a year if Earth were 20% closer to the Sun.
-[2m2025-08-21T06:04:05.207003Z[0m [32m INFO[0m [1magent_loop[0m[1m{[0m[3mrun_id[0m[2m=[0m4b5dbd9f-5bc8-4cda-87d6-522dbc84c228 [3muser_prompt[0m[2m=[0mUser: What is 2+2?
-Assistant: The result of 2+2 is 4.
-User: How long would a year on earth last if the earth were 20% closer to the sun?
-[1m}[0m[2m:[0m[1mrun_julia_cell[0m[1m{[0m[3mrun_dir[0m[2m=[0m/Users/leonardspeiser/Library/Application Support/com.CedarAI.CedarAI/runs/4b5dbd9f-5bc8-4cda-87d6-522dbc84c228[1m}[0m[2m:[0m [2mnotebook_core::executors::julia[0m[2m:[0m spawning julia
-[2m2025-08-21T06:04:06.177384Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m ERROR: LoadError: ArgumentError: Package Astrophysics not found in current path. [3mtarget[0m[2m=[0m"exec::stderr"
-[2m2025-08-21T06:04:06.177487Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m - Run `import Pkg; Pkg.add("Astrophysics")` to install the Astrophysics package. [3mtarget[0m[2m=[0m"exec::stderr"
-[2m2025-08-21T06:04:06.177516Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m Stacktrace: [3mtarget[0m[2m=[0m"exec::stderr"
-[2m2025-08-21T06:04:06.177675Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m  [1] macro expansion [3mtarget[0m[2m=[0m"exec::stderr"
-[2m2025-08-21T06:04:06.177885Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m    @ ./loading.jl:2296 [inlined] [3mtarget[0m[2m=[0m"exec::stderr"
-[2m2025-08-21T06:04:06.178011Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m  [2] macro expansion [3mtarget[0m[2m=[0m"exec::stderr"
-[2m2025-08-21T06:04:06.178176Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m    @ ./lock.jl:273 [inlined] [3mtarget[0m[2m=[0m"exec::stderr"
-[2m2025-08-21T06:04:06.190053Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m  [3] __require(into::Module, mod::Symbol) [3mtarget[0m[2m=[0m"exec::stderr"
-[2m2025-08-21T06:04:06.190335Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m    @ Base ./loading.jl:2271 [3mtarget[0m[2m=[0m"exec::stderr"
-[2m2025-08-21T06:04:06.190482Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m  [4] #invoke_in_world#3 [3mtarget[0m[2m=[0m"exec::stderr"
-[2m2025-08-21T06:04:06.190642Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m    @ ./essentials.jl:1089 [inlined] [3mtarget[0m[2m=[0m"exec::stderr"
-[2m2025-08-21T06:04:06.190767Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m  [5] invoke_in_world [3mtarget[0m[2m=[0m"exec::stderr"
-[2m2025-08-21T06:04:06.190919Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m    @ ./essentials.jl:1086 [inlined] [3mtarget[0m[2m=[0m"exec::stderr"
-[2m2025-08-21T06:04:06.191053Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m  [6] require(into::Module, mod::Symbol) [3mtarget[0m[2m=[0m"exec::stderr"
-[2m2025-08-21T06:04:06.191263Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m    @ Base ./loading.jl:2260 [3mtarget[0m[2m=[0m"exec::stderr"
-[2m2025-08-21T06:04:06.191297Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m in expression starting at /Users/leonardspeiser/Library/Application Support/com.CedarAI.CedarAI/runs/4b5dbd9f-5bc8-4cda-87d6-522dbc84c228/cell.jl:1 [3mtarget[0m[2m=[0m"exec::stderr"
-Calculating how long a year would last if Earth were 20% closer to the Sun using basic physics.
-[2m2025-08-21T06:04:09.944812Z[0m [32m INFO[0m [1magent_loop[0m[1m{[0m[3mrun_id[0m[2m=[0m4b5dbd9f-5bc8-4cda-87d6-522dbc84c228 [3muser_prompt[0m[2m=[0mUser: What is 2+2?
-Assistant: The result of 2+2 is 4.
-User: How long would a year on earth last if the earth were 20% closer to the sun?
-[1m}[0m[2m:[0m[1mrun_julia_cell[0m[1m{[0m[3mrun_dir[0m[2m=[0m/Users/leonardspeiser/Library/Application Support/com.CedarAI.CedarAI/runs/4b5dbd9f-5bc8-4cda-87d6-522dbc84c228[1m}[0m[2m:[0m [2mnotebook_core::executors::julia[0m[2m:[0m spawning julia
-[2m2025-08-21T06:04:10.867873Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m ERROR: LoadError: ArgumentError: Package PyCall not found in current path. [3mtarget[0m[2m=[0m"exec::stderr"
-[2m2025-08-21T06:04:10.867932Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m - Run `import Pkg; Pkg.add("PyCall")` to install the PyCall package. [3mtarget[0m[2m=[0m"exec::stderr"
-[2m2025-08-21T06:04:10.867972Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m Stacktrace: [3mtarget[0m[2m=[0m"exec::stderr"
-[2m2025-08-21T06:04:10.868150Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m  [1] macro expansion [3mtarget[0m[2m=[0m"exec::stderr"
-[2m2025-08-21T06:04:10.868344Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m    @ ./loading.jl:2296 [inlined] [3mtarget[0m[2m=[0m"exec::stderr"
-[2m2025-08-21T06:04:10.868468Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m  [2] macro expansion [3mtarget[0m[2m=[0m"exec::stderr"
-[2m2025-08-21T06:04:10.868628Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m    @ ./lock.jl:273 [inlined] [3mtarget[0m[2m=[0m"exec::stderr"
-[2m2025-08-21T06:04:10.879646Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m  [3] __require(into::Module, mod::Symbol) [3mtarget[0m[2m=[0m"exec::stderr"
-[2m2025-08-21T06:04:10.879930Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m    @ Base ./loading.jl:2271 [3mtarget[0m[2m=[0m"exec::stderr"
-[2m2025-08-21T06:04:10.880066Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m  [4] #invoke_in_world#3 [3mtarget[0m[2m=[0m"exec::stderr"
-[2m2025-08-21T06:04:10.880230Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m    @ ./essentials.jl:1089 [inlined] [3mtarget[0m[2m=[0m"exec::stderr"
-[2m2025-08-21T06:04:10.880353Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m  [5] invoke_in_world [3mtarget[0m[2m=[0m"exec::stderr"
-[2m2025-08-21T06:04:10.880510Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m    @ ./essentials.jl:1086 [inlined] [3mtarget[0m[2m=[0m"exec::stderr"
-[2m2025-08-21T06:04:10.880645Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m  [6] require(into::Module, mod::Symbol) [3mtarget[0m[2m=[0m"exec::stderr"
-[2m2025-08-21T06:04:10.880851Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m    @ Base ./loading.jl:2260 [3mtarget[0m[2m=[0m"exec::stderr"
-[2m2025-08-21T06:04:10.880880Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m in expression starting at /Users/leonardspeiser/Library/Application Support/com.CedarAI.CedarAI/runs/4b5dbd9f-5bc8-4cda-87d6-522dbc84c228/cell.jl:1 [3mtarget[0m[2m=[0m"exec::stderr"
-Calculating the duration of a year if Earth were 20% closer to the Sun using Kepler's laws.
-[2m2025-08-21T06:04:14.957672Z[0m [32m INFO[0m [1magent_loop[0m[1m{[0m[3mrun_id[0m[2m=[0m4b5dbd9f-5bc8-4cda-87d6-522dbc84c228 [3muser_prompt[0m[2m=[0mUser: What is 2+2?
-Assistant: The result of 2+2 is 4.
-User: How long would a year on earth last if the earth were 20% closer to the sun?
-[1m}[0m[2m:[0m[1mrun_julia_cell[0m[1m{[0m[3mrun_dir[0m[2m=[0m/Users/leonardspeiser/Library/Application Support/com.CedarAI.CedarAI/runs/4b5dbd9f-5bc8-4cda-87d6-522dbc84c228[1m}[0m[2m:[0m [2mnotebook_core::executors::julia[0m[2m:[0m spawning julia
-[2m2025-08-21T06:04:15.149439Z[0m [32m INFO[0m [2mnotebook_core::executors::julia[0m[2m:[0m Earth's orbital period would be approximately 261.32 days if it were 20% closer to the Sun. [3mtarget[0m[2m=[0m"exec::stdout"
-If the Earth were 20% closer to the Sun, a year would last approximately 261.32 days.
+   Compiling cedar-bundle v1.0.0 (/Users/leonardspeiser/Projects/cedarcli/apps/cedar-bundle)
+warning: function `get_html_path` is never used
+   --> apps/cedar-bundle/src/main.rs:140:4
+    |
+140 | fn get_html_path() -> PathBuf {
+    |    ^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: `cedar-bundle` (bin "cedar-bundle") generated 1 warning
+    Finished `release` profile [optimized] target(s) in 4.66s
+     Running `target/release/cedar-bundle`
+🌲 Cedar Agent Starting...
+Starting Cedar backend server...
+✅ Cedar server running on http://localhost:8080
+Opening Cedar web interface...
+Opening http://localhost:8080 in browser...
+Cedar is running at http://localhost:8080
+The app will continue running in the background.

@@ -1,6 +1,7 @@
 # External services and keys (OpenAI)
 
-- The CLI fetches/caches OPENAI_API_KEY from a token-protected endpoint when CEDAR_KEY_URL + APP_SHARED_TOKEN are set.
-- After fetching, the app calls OpenAI directly (Responses API) with Authorization header.
-- See README.md → "OpenAI configuration and key flow" for full details.
-- Code touching keys must include a comment pointing to this doc.
+- The Cedar server provides OpenAI API keys to clients via GET /config/openai_key endpoint
+- Clients fetch the key once at startup and cache it locally for the session
+- After fetching, the app calls OpenAI directly (Responses API) with Authorization header
+- See docs/openai-key-flow.md for complete key management strategy and configuration
+- Code touching keys must include a comment pointing to docs/openai-key-flow.md

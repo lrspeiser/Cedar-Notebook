@@ -109,7 +109,7 @@ impl MetadataManager {
                 null_count BIGINT,
                 distinct_count BIGINT,
                 PRIMARY KEY (dataset_id, column_name),
-                FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE
+                FOREIGN KEY (dataset_id) REFERENCES datasets(id)
             )",
             [],
         )?;
@@ -136,50 +136,80 @@ impl MetadataManager {
         // Start transaction
         conn.execute("BEGIN TRANSACTION", [])?;
         
-        // Insert dataset
-        conn.execute(
+        // Escape single quotes in strings
+        let escape_str = |s: &str| s.replace("'", "''");
+        
+        // Format row_count for SQL
+        let row_count_str = metadata.row_count
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| "NULL".to_string());
+        
+        // Insert dataset using formatted query to avoid prepared statement issues
+        let query = format!(
             "INSERT OR REPLACE INTO datasets 
             (id, file_path, file_name, file_size, file_type, title, description, row_count, sample_data, uploaded_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            params![
-                metadata.id,
-                metadata.file_path,
-                metadata.file_name,
-                metadata.file_size,
-                metadata.file_type,
-                metadata.title,
-                metadata.description,
-                metadata.row_count,
-                metadata.sample_data,
-                metadata.uploaded_at.to_rfc3339(),
-            ],
-        )?;
+            VALUES ('{}', '{}', '{}', {}, '{}', '{}', '{}', {}, '{}', '{}')",
+            escape_str(&metadata.id),
+            escape_str(&metadata.file_path),
+            escape_str(&metadata.file_name),
+            metadata.file_size,
+            escape_str(&metadata.file_type),
+            escape_str(&metadata.title),
+            escape_str(&metadata.description),
+            row_count_str,
+            escape_str(&metadata.sample_data),
+            metadata.uploaded_at.to_rfc3339(),
+        );
+        conn.execute(&query, [])?;
         
         // Delete existing columns for this dataset
-        conn.execute(
-            "DELETE FROM dataset_columns WHERE dataset_id = ?",
-            params![metadata.id],
-        )?;
+        let delete_query = format!(
+            "DELETE FROM dataset_columns WHERE dataset_id = '{}'",
+            escape_str(&metadata.id)
+        );
+        conn.execute(&delete_query, [])?;
         
         // Insert column information
         for col in &metadata.column_info {
-            conn.execute(
+            // Handle nullable fields
+            let desc_str = col.description.as_ref()
+                .map(|s| format!("'{}'", escape_str(s)))
+                .unwrap_or_else(|| "NULL".to_string());
+            let min_str = col.min_value.as_ref()
+                .map(|v| format!("'{}'", escape_str(&v.to_string())))
+                .unwrap_or_else(|| "NULL".to_string());
+            let max_str = col.max_value.as_ref()
+                .map(|v| format!("'{}'", escape_str(&v.to_string())))
+                .unwrap_or_else(|| "NULL".to_string());
+            let avg_str = col.avg_value
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "NULL".to_string());
+            let median_str = col.median_value
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "NULL".to_string());
+            let null_count_str = col.null_count
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "NULL".to_string());
+            let distinct_count_str = col.distinct_count
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "NULL".to_string());
+            
+            let col_query = format!(
                 "INSERT INTO dataset_columns 
                 (dataset_id, column_name, data_type, description, min_value, max_value, avg_value, median_value, null_count, distinct_count)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                params![
-                    metadata.id,
-                    col.name,
-                    col.data_type,
-                    col.description,
-                    col.min_value.as_ref().map(|v| v.to_string()),
-                    col.max_value.as_ref().map(|v| v.to_string()),
-                    col.avg_value,
-                    col.median_value,
-                    col.null_count,
-                    col.distinct_count,
-                ],
-            )?;
+                VALUES ('{}', '{}', '{}', {}, {}, {}, {}, {}, {}, {})",
+                escape_str(&metadata.id),
+                escape_str(&col.name),
+                escape_str(&col.data_type),
+                desc_str,
+                min_str,
+                max_str,
+                avg_str,
+                median_str,
+                null_count_str,
+                distinct_count_str,
+            );
+            conn.execute(&col_query, [])?;
         }
         
         // Commit transaction
@@ -234,14 +264,20 @@ impl MetadataManager {
     fn get_column_info(&self, dataset_id: &str) -> Result<Vec<ColumnInfo>> {
         let conn = self.get_connection()?;
         
-        let mut stmt = conn.prepare(
+        // Escape single quotes
+        let escape_str = |s: &str| s.replace("'", "''");
+        
+        let query = format!(
             "SELECT column_name, data_type, description, min_value, max_value, avg_value, median_value, null_count, distinct_count
             FROM dataset_columns
-            WHERE dataset_id = ?
-            ORDER BY column_name"
-        )?;
+            WHERE dataset_id = '{}'
+            ORDER BY column_name",
+            escape_str(dataset_id)
+        );
         
-        let columns = stmt.query_map([dataset_id], |row| {
+        let mut stmt = conn.prepare(&query)?;
+        
+        let columns = stmt.query_map([], |row| {
             Ok(ColumnInfo {
                 name: row.get(0)?,
                 data_type: row.get(1)?,
@@ -265,13 +301,19 @@ impl MetadataManager {
     pub fn get_dataset(&self, id: &str) -> Result<Option<DatasetMetadata>> {
         let conn = self.get_connection()?;
         
-        let mut stmt = conn.prepare(
+        // Escape single quotes
+        let escape_str = |s: &str| s.replace("'", "''");
+        
+        let query = format!(
             "SELECT id, file_path, file_name, file_size, file_type, title, description, row_count, sample_data, uploaded_at
             FROM datasets
-            WHERE id = ?"
-        )?;
+            WHERE id = '{}'",
+            escape_str(id)
+        );
         
-        let mut rows = stmt.query_map([id], |row| {
+        let mut stmt = conn.prepare(&query)?;
+        
+        let mut rows = stmt.query_map([], |row| {
             let uploaded_at_str: String = row.get(9)?;
             
             Ok(DatasetMetadata {
@@ -303,7 +345,10 @@ impl MetadataManager {
     /// Delete a dataset from the database
     pub fn delete_dataset(&self, id: &str) -> Result<()> {
         let conn = self.get_connection()?;
-        conn.execute("DELETE FROM datasets WHERE id = ?", params![id])?;
+        // Escape single quotes
+        let escape_str = |s: &str| s.replace("'", "''");
+        let query = format!("DELETE FROM datasets WHERE id = '{}'", escape_str(id));
+        conn.execute(&query, [])?;
         Ok(())
     }
     
@@ -320,11 +365,9 @@ impl MetadataManager {
         conn.execute(&query, [])?;
         
         // Get row count
-        let row_count: i64 = conn.query_row(
-            &format!("SELECT COUNT(*) FROM {}", table_name),
-            [],
-            |row| row.get(0)
-        )?;
+        let query = format!("SELECT COUNT(*) FROM {}", table_name);
+        let mut stmt = conn.prepare(&query)?;
+        let row_count: i64 = stmt.query_row([], |row| row.get(0))?;
         
         // Get column information and statistics
         let columns = self.analyze_table(&conn, table_name)?;
@@ -369,64 +412,48 @@ impl MetadataManager {
             };
             
             // Get null count
-            stats.null_count = conn.query_row(
-                &format!("SELECT COUNT(*) FROM {} WHERE {} IS NULL", table_name, col_name),
-                [],
-                |row| row.get(0)
-            )?;
+            let null_query = format!("SELECT COUNT(*) FROM {} WHERE {} IS NULL", table_name, col_name);
+            let mut null_stmt = conn.prepare(&null_query)?;
+            stats.null_count = null_stmt.query_row([], |row| row.get(0))?;
             
             // Get distinct count
-            stats.distinct_count = conn.query_row(
-                &format!("SELECT COUNT(DISTINCT {}) FROM {}", col_name, table_name),
-                [],
-                |row| row.get(0)
-            )?;
+            let distinct_query = format!("SELECT COUNT(DISTINCT {}) FROM {}", col_name, table_name);
+            let mut distinct_stmt = conn.prepare(&distinct_query)?;
+            stats.distinct_count = distinct_stmt.query_row([], |row| row.get(0))?;
             
             // For numeric types, get min, max, avg, median
             if data_type.contains("INT") || data_type.contains("FLOAT") || data_type.contains("DOUBLE") || data_type.contains("DECIMAL") {
                 // Min
-                let min_val: Option<f64> = conn.query_row(
-                    &format!("SELECT MIN({}) FROM {}", col_name, table_name),
-                    [],
-                    |row| row.get(0)
-                ).ok();
+                let min_query = format!("SELECT MIN({}) FROM {}", col_name, table_name);
+                let min_val: Option<f64> = conn.prepare(&min_query)
+                    .and_then(|mut stmt| stmt.query_row([], |row| row.get(0))).ok();
                 stats.min = min_val.map(|v| serde_json::Value::from(v));
                 
                 // Max
-                let max_val: Option<f64> = conn.query_row(
-                    &format!("SELECT MAX({}) FROM {}", col_name, table_name),
-                    [],
-                    |row| row.get(0)
-                ).ok();
+                let max_query = format!("SELECT MAX({}) FROM {}", col_name, table_name);
+                let max_val: Option<f64> = conn.prepare(&max_query)
+                    .and_then(|mut stmt| stmt.query_row([], |row| row.get(0))).ok();
                 stats.max = max_val.map(|v| serde_json::Value::from(v));
                 
                 // Average
-                stats.avg = conn.query_row(
-                    &format!("SELECT AVG({}) FROM {}", col_name, table_name),
-                    [],
-                    |row| row.get(0)
-                ).ok();
+                let avg_query = format!("SELECT AVG({}) FROM {}", col_name, table_name);
+                stats.avg = conn.prepare(&avg_query)
+                    .and_then(|mut stmt| stmt.query_row([], |row| row.get(0))).ok();
                 
                 // Median (using PERCENTILE_CONT)
-                stats.median = conn.query_row(
-                    &format!("SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY {}) FROM {}", col_name, table_name),
-                    [],
-                    |row| row.get(0)
-                ).ok();
+                let median_query = format!("SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY {}) FROM {}", col_name, table_name);
+                stats.median = conn.prepare(&median_query)
+                    .and_then(|mut stmt| stmt.query_row([], |row| row.get(0))).ok();
             } else if data_type.contains("VARCHAR") || data_type.contains("TEXT") {
                 // For string types, get min and max (lexicographically)
-                let min_val: Option<String> = conn.query_row(
-                    &format!("SELECT MIN({}) FROM {}", col_name, table_name),
-                    [],
-                    |row| row.get(0)
-                ).ok();
+                let min_query = format!("SELECT MIN({}) FROM {}", col_name, table_name);
+                let min_val: Option<String> = conn.prepare(&min_query)
+                    .and_then(|mut stmt| stmt.query_row([], |row| row.get(0))).ok();
                 stats.min = min_val.map(|v| serde_json::Value::String(v));
                 
-                let max_val: Option<String> = conn.query_row(
-                    &format!("SELECT MAX({}) FROM {}", col_name, table_name),
-                    [],
-                    |row| row.get(0)
-                ).ok();
+                let max_query = format!("SELECT MAX({}) FROM {}", col_name, table_name);
+                let max_val: Option<String> = conn.prepare(&max_query)
+                    .and_then(|mut stmt| stmt.query_row([], |row| row.get(0))).ok();
                 stats.max = max_val.map(|v| serde_json::Value::String(v));
             }
             

@@ -6,3 +6,4 @@ pub mod runs;
 pub mod cards;
 pub mod util;
 pub mod duckdb_metadata;
+pub mod key_manager;

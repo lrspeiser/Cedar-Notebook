@@ -200,7 +200,7 @@ async fn handle_submit_query(body: SubmitQueryBody) -> anyhow::Result<SubmitQuer
     // Configure agent
     let config = AgentConfig {
         openai_api_key: api_key,
-        openai_model: std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o-2024-08-06".to_string()),
+        openai_model: std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-5".to_string()),
         openai_base: std::env::var("OPENAI_BASE").ok(),
         relay_url: std::env::var("CEDAR_KEY_URL").ok(),
         app_shared_token: std::env::var("APP_SHARED_TOKEN").ok(),
@@ -342,32 +342,28 @@ async fn upload_file(mut multipart: Multipart) -> Result<Json<serde_json::Value>
         let sample_data = extract_sample_lines(&file_path, 30)
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
         
-        // For CSV files, analyze with DuckDB
-        let (stats, column_info) = if file_type == "CSV" {
-            let table_name = format!("temp_{}", dataset_id.replace("-", "_"));
-            
-            // Create table and get statistics
-            let stats = metadata_manager.create_table_from_csv(&file_path, &table_name)
-                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to analyze CSV: {}", e)))?;
-            
-            // Convert stats to column info
-            let columns: Vec<ColumnInfo> = stats.columns.iter().map(|col| {
-                ColumnInfo {
-                    name: col.name.clone(),
-                    data_type: col.data_type.clone(),
-                    description: None,
-                    min_value: col.min.clone(),
-                    max_value: col.max.clone(),
-                    avg_value: col.avg,
-                    median_value: col.median,
-                    null_count: Some(col.null_count),
-                    distinct_count: Some(col.distinct_count),
-                }
-            }).collect();
-            
-            (Some(stats), columns)
+        // Parse CSV headers to get column names if it's a CSV
+        let column_info = if file_type == "CSV" {
+            // Just get column names from first line
+            if let Some(first_line) = sample_data.lines().next() {
+                first_line.split(',').map(|col| {
+                    ColumnInfo {
+                        name: col.trim().trim_matches('"').to_string(),
+                        data_type: "String".to_string(), // Will be determined by LLM/Julia
+                        description: None,
+                        min_value: None,
+                        max_value: None,
+                        avg_value: None,
+                        median_value: None,
+                        null_count: None,
+                        distinct_count: None,
+                    }
+                }).collect()
+            } else {
+                Vec::new()
+            }
         } else {
-            (None, Vec::new())
+            Vec::new()
         };
         
         // Prepare metadata for LLM enhancement
@@ -376,17 +372,9 @@ async fn upload_file(mut multipart: Multipart) -> Result<Json<serde_json::Value>
             "file_size": data.len(),
             "file_type": file_type,
             "sample_data": sample_data,
-            "row_count": stats.as_ref().map(|s| s.row_count),
             "columns": column_info.iter().map(|col| {
                 serde_json::json!({
-                    "name": col.name,
-                    "type": col.data_type,
-                    "min": col.min_value,
-                    "max": col.max_value,
-                    "avg": col.avg_value,
-                    "median": col.median_value,
-                    "nulls": col.null_count,
-                    "distinct": col.distinct_count
+                    "name": col.name
                 })
             }).collect::<Vec<_>>(),
         });
@@ -426,7 +414,7 @@ async fn upload_file(mut multipart: Multipart) -> Result<Json<serde_json::Value>
         
         let config = AgentConfig {
             openai_api_key: api_key,
-            openai_model: std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o-mini".to_string()),
+            openai_model: std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-5".to_string()),
             openai_base: std::env::var("OPENAI_BASE").ok(),
             relay_url: std::env::var("CEDAR_KEY_URL").ok(),
             app_shared_token: std::env::var("APP_SHARED_TOKEN").ok(),
@@ -438,8 +426,8 @@ async fn upload_file(mut multipart: Multipart) -> Result<Json<serde_json::Value>
             rt.block_on(agent_loop(&temp_run.dir, &llm_prompt, 1, config))
         })
         .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Task execution failed: {}", e)))?
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("LLM call failed: {}", e)))?;
         
         // Parse LLM response
         let (title, description, enhanced_columns, julia_code) = if let Some(final_output) = llm_result.final_output {
@@ -511,7 +499,7 @@ async fn upload_file(mut multipart: Multipart) -> Result<Json<serde_json::Value>
         }
         
         // Create metadata record (including julia_code if available)
-        let mut metadata = DatasetMetadata {
+        let metadata = DatasetMetadata {
             id: dataset_id.clone(),
             file_path: file_path.to_string_lossy().to_string(),
             file_name: file_name.clone(),
@@ -519,7 +507,7 @@ async fn upload_file(mut multipart: Multipart) -> Result<Json<serde_json::Value>
             file_type,
             title,
             description,
-            row_count: stats.as_ref().map(|s| s.row_count),
+            row_count: None, // Will be populated after Julia conversion to Parquet
             column_info: enhanced_columns,
             sample_data,
             uploaded_at: chrono::Utc::now(),
@@ -616,6 +604,31 @@ async fn delete_dataset(Path(dataset_id): Path<String>) -> Result<Json<serde_jso
     })))
 }
 
+/// Get OpenAI API key from server environment for client provisioning
+/// See docs/openai-key-flow.md for the complete key management strategy
+/// This endpoint allows the Cedar app to fetch the key once at startup
+/// and use it for all subsequent OpenAI API calls
+async fn get_openai_key() -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    // Try to get the OpenAI API key from environment
+    let api_key = std::env::var("OPENAI_API_KEY")
+        .or_else(|_| std::env::var("openai_api_key"))
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "OpenAI API key not configured on server. Please set OPENAI_API_KEY environment variable.".to_string()))?;
+    
+    // Validate that it looks like a valid OpenAI key
+    if !api_key.starts_with("sk-") || api_key.len() < 40 {
+        return Err((StatusCode::INTERNAL_SERVER_ERROR, "Invalid OpenAI API key format on server".to_string()));
+    }
+    
+    // Log the request (with redacted key for security)
+    let key_fingerprint = format!("{}...{}", &api_key[..6], &api_key[api_key.len()-4..]);
+    eprintln!("[cedar-server] OpenAI key requested, returning key with fingerprint: {}", key_fingerprint);
+    
+    Ok(Json(serde_json::json!({
+        "openai_api_key": api_key,
+        "source": "server",
+    })))
+}
+
 pub async fn serve() -> anyhow::Result<()> {
     // Get port from environment or use default
     let port: u16 = std::env::var("PORT")
@@ -646,6 +659,8 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/datasets/:dataset_id", get(get_dataset).delete(delete_dataset))
         // SSE events
         .route("/runs/:run_id/events", get(sse_run_events))
+        // Configuration endpoints
+        .route("/config/openai_key", get(get_openai_key))
         // Add CORS layer for cross-origin requests
         .layer(
             CorsLayer::new()

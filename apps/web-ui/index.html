@@ -868,6 +868,12 @@
                     body: formData
                 });
                 
+                // Check if response is OK before trying to parse JSON
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(errorText || `Upload failed with status ${response.status}`);
+                }
+                
                 const result = await response.json();
                 
                 if (result.success) {

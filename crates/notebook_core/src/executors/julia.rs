@@ -67,8 +67,42 @@ pub fn run_julia_cell(run_dir: &Path, code: &str) -> anyhow::Result<ToolOutcome>
     fs::write(&script_path, code)?;
     debug!(script = %script_path.display(), "wrote Julia cell");
 
+    // Check for embedded Julia first (in app bundle)
+    let julia_cmd = if cfg!(target_os = "macos") {
+        // Check if we're running from an app bundle
+        if let Ok(exe_path) = std::env::current_exe() {
+            if exe_path.to_string_lossy().contains(".app/Contents/MacOS") {
+                // We're in an app bundle, use embedded Julia
+                let bundle_julia = exe_path
+                    .parent().unwrap()  // MacOS
+                    .parent().unwrap()  // Contents
+                    .join("Resources/julia-wrapper.sh");
+                if bundle_julia.exists() {
+                    debug!("Using embedded Julia from app bundle");
+                    bundle_julia.to_string_lossy().to_string()
+                } else {
+                    "julia".to_string()
+                }
+            } else {
+                // Development mode - check for embedded Julia in resources
+                let dev_julia = Path::new("apps/cedar-bundle/resources/julia-wrapper.sh");
+                if dev_julia.exists() {
+                    debug!("Using embedded Julia from development resources");
+                    dev_julia.to_string_lossy().to_string()
+                } else {
+                    "julia".to_string()
+                }
+            }
+        } else {
+            "julia".to_string()
+        }
+    } else {
+        // On other platforms, use system Julia or check env var
+        std::env::var("JULIA_BIN").unwrap_or_else(|_| "julia".to_string())
+    };
+
     // Prefer passing the file path directly to Julia.
-    let mut cmd = Command::new("julia");
+    let mut cmd = Command::new(&julia_cmd);
     cmd.arg("--project")
         .arg(script_path.as_os_str())
         .current_dir(run_dir)

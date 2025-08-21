@@ -22,6 +22,14 @@ if ! command -v cargo-bundle &> /dev/null; then
     cargo install cargo-bundle
 fi
 
+# Embed Julia if not already done
+if [ ! -d "apps/cedar-bundle/resources/julia" ]; then
+    echo -e "${BLUE}Embedding Julia...${NC}"
+    ./scripts/embed-julia.sh
+else
+    echo -e "${GREEN}Julia already embedded${NC}"
+fi
+
 # Build the release binary
 echo -e "${BLUE}Building Cedar release binary...${NC}"
 cd apps/cedar-bundle
@@ -43,6 +51,23 @@ fi
 echo -e "${BLUE}Copying web UI resources...${NC}"
 mkdir -p "$BUNDLE_PATH/Contents/Resources/web-ui"
 cp -r ../../apps/web-ui/* "$BUNDLE_PATH/Contents/Resources/web-ui/"
+
+# Copy embedded Julia into the bundle
+echo -e "${BLUE}Copying embedded Julia...${NC}"
+if [ -d "resources/julia" ]; then
+    cp -r resources/julia "$BUNDLE_PATH/Contents/Resources/"
+    cp resources/julia-wrapper.sh "$BUNDLE_PATH/Contents/Resources/"
+    chmod +x "$BUNDLE_PATH/Contents/Resources/julia-wrapper.sh"
+    
+    # Copy Julia environment if it exists
+    if [ -d "resources/julia_env" ]; then
+        cp -r resources/julia_env "$BUNDLE_PATH/Contents/Resources/"
+    fi
+    
+    echo -e "${GREEN}Julia embedded in app bundle${NC}"
+else
+    echo -e "${YELLOW}Warning: Embedded Julia not found. App will use system Julia.${NC}"
+fi
 
 # Create a DMG using create-dmg if available, otherwise use hdiutil
 if command -v create-dmg &> /dev/null; then

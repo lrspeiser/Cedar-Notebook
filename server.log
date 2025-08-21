@@ -1,0 +1,4 @@
+   Compiling notebook_server v0.0.1 (/Users/leonardspeiser/Projects/cedarcli/crates/notebook_server)
+    Finished `release` profile [optimized] target(s) in 3.61s
+     Running `target/release/notebook_server`
+[2m2025-08-21T05:41:53.801675Z[0m [32m INFO[0m [2mnotebook_server[0m[2m:[0m Starting server on 127.0.0.1:8080

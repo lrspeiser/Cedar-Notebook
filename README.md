@@ -2,10 +2,11 @@
 
 CedarCLI is a Rust-based agent that uses an LLM to interpret requests and decide—on every turn—whether to:
 - generate and run Julia code for data/compute tasks,
-- execute a safe, allowlisted shell command for OS-level actions, or
-- ask the user a clarifying question.
+- execute a safe, allowlisted shell command for OS-level actions,
+- ask the user a clarifying question, or
+- provide a final answer based on execution results.
 
-The agent loops until it reaches a satisfactory answer or a termination condition. Along the way it persists artifacts (logs, JSON previews, Parquet datasets) and tables to DuckDB-backed Parquet so results are reproducible and inspectable. A native desktop app (`cedar‑egui`) uses the same core crate.
+The agent loops until it reaches a satisfactory answer or a termination condition. Along the way it persists artifacts (logs, JSON previews, Parquet datasets) and tables to DuckDB-backed Parquet so results are reproducible and inspectable. Both a web UI and native desktop app (`cedar‑egui`) use the same core crate.
 
 If you want to get running quickly, start with **Quick start**.
 
@@ -48,8 +49,14 @@ cargo run --bin cedar-cli -- runs-insspect --limit 20 --details
 The LLM is the planner and router. Each turn:
 1) The system sends a transcript of prior turns plus your latest input to the model.
 2) The model returns a JSON decision: an action and args, or a final `user_output` string.
-3) If the action is a tool call, CedarCLI validates the args, executes the tool, persists artifacts, and pushes a compact result back into the next turn’s context. If the action is `more_from_user`, it surfaces a concise question to you.
+3) If the action is a tool call, CedarCLI validates the args, executes the tool, persists artifacts, and pushes a compact result back into the next turn's context. If the action is `more_from_user`, it surfaces a concise question to you.
 4) The loop continues (up to 30 turns) until the model emits a final `user_output`, at which point CedarCLI writes a card and exits.
+
+### Critical Architecture Decisions
+- **Julia Output Enforcement**: The system prompt explicitly requires `println()` in all Julia code to ensure outputs are captured
+- **Feedback Loop**: Tool execution results are always sent back to the LLM as `tool_context` in the next turn
+- **Final Answer Requirement**: After tool execution, the LLM must provide a final answer action
+- **Error Recovery**: stderr and error states are captured and fed back to enable self-correction
 
 **Important files**
 - `crates/cedar-core/src/agent_loop.rs` — Orchestrates the loop, validates model tool args, dispatches tools, persists “cards”, and feeds results back to the model.
@@ -164,6 +171,33 @@ Notes
 - **Inspect persistent runs (debugger)**
   - `cargo run --bin cedar-cli -- runs-inspect --limit 20 --details`
 
+## Web UI (Enhanced Interactive Interface)
+The enhanced web UI provides a rich debugging interface for the agent loop:
+
+### Starting the Web Server
+```bash
+# Build and run the notebook server
+cargo build --release --bin notebook_server
+cargo run --release --bin notebook_server
+# Server runs on http://localhost:8080 by default
+```
+
+### Using the Web Interface
+1. Open `apps/web-ui/app-enhanced.html` in your browser
+2. Enter your OpenAI API key in the configuration section
+3. Enable "Debug Mode" to see detailed execution flow
+4. Submit queries and watch the agent work through:
+   - Julia code generation with enforced `println()` output
+   - Execution results and error handling
+   - Tool context feedback to the LLM
+   - Final answer generation
+
+### Web UI Features
+- **Conversation Flow Visualization**: See each step of the agent loop
+- **Debug Mode**: View technical details like LLM decisions and tool contexts
+- **Conversation History**: Track multiple queries in a session
+- **Raw Data View**: Inspect the complete JSON structure of conversations
+
 ## Desktop app (cedar‑egui)
 - Build (release):
   ```bash
@@ -174,7 +208,7 @@ Notes
   cargo run --release --manifest-path apps/cedar-egui/Cargo.toml
   ```
 
-Note: The older Tauri/Electron wrapper is deprecated. The web UI under `webui/` is only for server smoke tests; APIs remain supported.
+Note: The older Tauri/Electron wrapper is deprecated. The web UI under `apps/web-ui/` provides an enhanced debugging interface.
 
 ## Logging and observability
 - Set `RUST_LOG=info` (default) or `debug` for verbose traces.

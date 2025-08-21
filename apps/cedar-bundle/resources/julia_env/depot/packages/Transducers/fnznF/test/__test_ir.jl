@@ -1,0 +1,129 @@
+include("preamble.jl")
+
+using InteractiveUtils: code_llvm, code_warntype
+using Statistics: mean
+
+using Transducers: Reduction, start, __foldl__, __simple_foldl__,
+    maybe_usesimd, SideEffect, _prepare_map, _map!
+
+"""
+    llvm_ir(f, args) :: String
+
+Get LLVM IR of `f(args...)` as a string.
+"""
+llvm_ir(f, args) = sprint(code_llvm, f, Base.typesof(args...))
+
+"""
+    julia_ir(f, args) :: String
+
+Get Julia IR of `f(args...)` as a string.
+"""
+julia_ir(f, args) = sprint(code_warntype, f, Base.typesof(args...))
+
+matchedlines(r, s) = [m.match for m in eachmatch(r, s)]
+anyunions(s) = matchedlines(r".*UNION.*", s)
+nmatches(r, s) = count(_ -> true, eachmatch(r, s))
+
+const __is32bit = Int == Int32
+const __width_ir_fmul = __is32bit ? 2 : 4
+@testset "map!" begin
+    xf = opcompose(Filter(x -> -0.5 < x < 0.5), Map(x -> 2x))
+    xs = Float64[]
+    ys = Float64[]
+
+    @testset "history" begin
+        # This test used to work but it wouldn't work now (unless the
+        # compiler becomes _extremely_ smart).
+        ir = llvm_ir(map!, (xf, ys, xs))
+        @debug "map!/history" LLVM_IR=Text(ir)
+        if VERSION < v"1.11.0-"
+            @test_broken nmatches(r"fmul <[0-9]+ x double>", ir) >= __width_ir_fmul
+            @test_broken nmatches(r"fcmp [a-z]* <[0-9]+ x double>", ir) >= __width_ir_fmul
+        else
+            # Compiler is now "_extremely_ smart"
+            @test nmatches(r"fmul <[0-9]+ x double>", ir) >= __width_ir_fmul
+            @test nmatches(r"fcmp [a-z]* <[0-9]+ x double>", ir) >= __width_ir_fmul
+        end
+    end
+
+    @testset for simd in [false, true, :ivdep]
+        args = _prepare_map(xf, ys, xs, simd)
+        ir = llvm_ir(_map!, args)
+        @debug "map!/simd=$simd" LLVM_IR=Text(ir)
+        @test nmatches(r"fmul <[0-9]+ x double>", ir) >= __width_ir_fmul
+        @test nmatches(r"fcmp [a-z]* <[0-9]+ x double>", ir) >= __width_ir_fmul
+    end
+end
+
+
+@testset "Cat SIMD" begin
+    coll = [Float64[]]
+    rf = maybe_usesimd(Reduction(Cat(), +), true)
+    ir = llvm_ir(transduce, (rf, 0.0, coll))
+    @debug "Cat SIMD" LLVM_IR=Text(ir)
+    @static if VERSION < v"1.10-"
+        @test nmatches(r"fadd (fast )?<[0-9]+ x double>", ir) >= 9
+    end
+end
+
+unsafe_setter(ys) =
+    function((i, x),)
+        @inbounds ys[i] = x
+        return
+    end
+
+@testset "foreach SIMD" begin
+    xf_double = Map(x -> 2x)
+
+    params = [
+        :Enumerate => opcompose(xf_double, Enumerate()),
+        :ZipSource =>
+            opcompose(xf_double, Transducers.ZipSource(Count()), Map(reverse)),
+        #= Zip was working before...
+        :Zip => Zip(Count(), xf_double),
+        =#
+    ]
+
+    @testset "$key" for key in first.(params)
+        xf = Dict(params)[key]
+
+        xs = ones(10)
+        ys = zero(xs)
+
+        foreach(unsafe_setter(ys), xf, xs)
+        @test ys == 2xs
+
+        # Manually "expand" `foreach` internal (so that I can observe
+        # SIMD in the IR).
+        rf = Reduction(xf, SideEffect(unsafe_setter(ys)))
+        rf = maybe_usesimd(rf, true)
+        fill!(ys, 0)
+        transduce(rf, nothing, xs)
+        @test ys == 2xs
+
+        ir = llvm_ir(transduce, (rf, nothing, xs))
+        @debug "foreach SIMD/$key" LLVM_IR=Text(ir)
+        @test nmatches(r"fmul <[0-9]+ x double>", ir) >= __width_ir_fmul
+    end
+end
+
+
+@testset "PartitionBy" begin
+    xf = opcompose(PartitionBy(x -> x > 0), Filter(xs -> mean(abs, xs) < 1.0), Map(prod))
+
+    # Union coming from
+    okunion = r"UNION\{NOTHING, *TUPLE\{INT64, *INT64\}\}"
+
+    coll = Float64[]
+    rf = Reduction(xf, +)
+    val = start(rf, 0.0)
+    ir = julia_ir(__foldl__, (rf, val, coll))
+    @debug "PartitionBy" LLVM_IR=Text(ir)
+    @test anyunions(replace(ir, okunion => "")) == []
+
+    # If Julia becomes clever enough to make `__simple_foldl__`
+    # type-stable, there is no need to maintain current complex code:
+    simple_ir = julia_ir(__simple_foldl__, (rf, val, coll))
+    @debug "PartitionBy/simple" LLVM_IR=Text(simple_ir)
+    @test !isempty(anyunions(replace(simple_ir, okunion => "")))
+end

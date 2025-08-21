@@ -1,0 +1,458 @@
+"""
+    foldxt(step, xf, reducible; [init, simd, basesize, stoppable, nestlevel]) :: T
+
+e**X**tended **t**hreaded fold (reduce).  This is a multi-threaded
+`reduce` based on extended fold protocol defined in Transducers.jl.
+
+The "bottom" reduction function `step(::T, ::T) :: T` must be
+associative and `init` must be its identity element.
+
+Transducers composing `xf` must be stateless (e.g., [`Map`](@ref),
+[`Filter`](@ref), [`Cat`](@ref), etc.) except for [`ScanEmit`](@ref).
+Note that [`Scan`](@ref) is not supported (although possible in
+theory).  Early termination requires Julia ≥ 1.3.
+
+Use [`tcollect`](@ref) or [`tcopy`](@ref) to collect results into a
+container.
+
+See also: [Parallel processing tutorial](@ref tutorial-parallel),
+[`foldxl`](@ref), [`foldxd`](@ref).
+
+# Keyword Arguments
+$_THREADED_EX_OPTS_DOCS
+- For other keyword arguments, see [`foldl`](@ref).
+
+!!! compat "Transducers.jl 0.4.23"
+
+    Keyword option `stoppable` requires at least Transducers.jl 0.4.23.
+
+# Examples
+```jldoctest
+julia> using Transducers
+
+julia> foldxt(+, 1:3 |> Map(exp) |> Map(log))
+6.0
+
+julia> using BangBang: append!!
+
+julia> foldxt(append!!, Map(x -> 1:x), 1:2; basesize=1, init=Union{}[])
+3-element Vector{Int64}:
+ 1
+ 1
+ 2
+
+julia> 1:5 |> Filter(isodd) |> foldxt(+)
+9
+
+julia> foldxt(TeeRF(min, max), [5, 2, 6, 8, 3])
+(2, 8)
+```
+"""
+foldxt
+
+const _MAPREDUCE_DEPWARN = (
+    "`mapreduce(::Transducer, rf, itr)` is deprecated. " *
+    " Use `foldxt(rf, ::Transducer, itr)` if you do not need to call single-argument" *
+    " `rf` on `complete`." *
+    " Use `foldxt(whencomplete(rf, rf), ::Transducer, itr)` to call the" *
+    " single-argument method of `rf` on complete."
+)
+
+"""
+    mapreduce(xf, step, reducible; init, simd)
+
+!!! warning
+
+    $_MAPREDUCE_DEPWARN
+
+Like [`foldxt`](@ref) but `step` is _not_ automatically wrapped by
+[`Completing`](@ref).
+"""
+Base.mapreduce
+
+"""
+    Transducers.issmall(reducible, basesize) :: Bool
+
+Check if `reducible` collection is considered small compared to
+`basesize` (an integer).  Fold functions such as [`foldxt`](@ref)
+switches to sequential `__foldl__` when `issmall` returns `true`.
+
+Default implementation is `amount(reducible) <= basesize`.
+"""
+issmall
+
+function transduce_assoc(
+    xform::Transducer,
+    step::F,
+    init,
+    coll0;
+    simd::SIMDFlag = Val(false),
+    basesize::Union{Integer,Nothing} = nothing,
+    stoppable::Union{Bool,Nothing} = nothing,
+    nestlevel::Union{Val,Integer,Nothing} = nothing,
+) where {F}
+    rf0 = _reducingfunction(xform, step; init = init)
+    rf, coll = retransform(rf0, coll0)
+    if nestlevel !== nothing
+        if basesize === nothing
+            throw(ArgumentError("`nestlevel` requires `basesize`"))
+        end
+        if has(rf, Union{Cat,TCat})
+            rf = use_threads_for_inner_cats(rf, basesize, nestlevel)
+            basesize = 1
+        end
+    end
+    if stoppable === nothing
+        stoppable = _might_return_reduced(rf, init, coll)
+    end
+    acc = @return_if_reduced _transduce_assoc_nocomplete(
+        maybe_usesimd(rf, simd),
+        init,
+        coll,
+        basesize === nothing ? amount(coll) ÷ Threads.nthreads() : basesize,
+        stoppable ? CancellableDACContext() : NoopDACContext(),
+    )
+    result = complete(rf, acc)
+    if unreduced(result) isa DefaultInitOf
+        throw(EmptyResultError(rf))
+        # See how `transduce(rf, init, coll)` is implemented in ./processes.jl
+    end
+    return result
+end
+
+function _transduce_assoc_nocomplete(
+    rf::F,
+    init,
+    coll,
+    basesize,
+    ctx::DACContext = NoopDACContext(),
+) where {F}
+    reducible = SizedReducible(coll, basesize)
+    return _reduce(ctx, rf, init, reducible)
+end
+
+function _reduce(ctx, rf::R, init::I, reducible::Reducible) where {R,I}
+    if should_abort(ctx)
+        return init
+    end
+    if issmall(reducible)
+        acc = _reduce_basecase(rf, init, reducible)
+        if acc isa Reduced
+            cancel!(ctx)
+        end
+        return acc
+    else
+        left, right = _halve(reducible)
+        fg, bg = splitcontext(ctx)
+        task = @spawn _reduce(bg, rf, init, right)
+        a0 = _reduce(fg, rf, init, left)
+        b0 = fetch(task)
+        a = @return_if_reduced a0
+        should_abort(ctx) && return a  # slight optimization
+        b0 isa Reduced && return combine_right_reduced(rf, a, b0)
+        return combine(rf, a, b0)
+    end
+end
+
+combine_right_reduced(rf, a, b0::Reduced) =
+    reduced(combine(_realbottomrf(rf), a, unreduced(b0)))
+
+# TODO: make this the default behavior of `combine`
+function combine_reduced(rf, a, b)
+    a isa Reduced && return a
+    b isa Reduced && return combine_right_reduced(rf, a, b)
+    return combine(rf, a, b)
+end
+
+function _reduce_threads_for(rf, init, reducible::SizedReducible{<:AbstractArray})
+    arr = reducible.reducible
+    basesize = reducible.basesize
+    nthreads = max(
+        1,
+        basesize <= 1 ? length(arr) : length(arr) ÷ basesize
+    )
+    if nthreads == 1
+        return foldl_basecase(rf, start(rf, init), arr)
+    else
+        w = length(arr) ÷ nthreads
+        results = Vector{Any}(undef, nthreads)
+        Threads.@threads for i in 1:nthreads
+            if i == nthreads
+                chunk = @view arr[(i - 1) * w + 1:end]
+            else
+                chunk = @view arr[(i - 1) * w + 1:i * w]
+            end
+            results[i] = foldl_basecase(rf, start(rf, init), chunk)
+        end
+        # It can be done in `log2(n)` for loops but it's not clear if
+        # `combine` is compute-intensive enough so that launching
+        # threads is worth enough.  Let's merge the `results`
+        # sequentially for now.
+        return combine_all(rf, results)
+    end
+end
+
+function combine_all(rf, results)
+    step = combine_step(rf)
+    return transduce(ensurerf(Completing(step)), Init(step), results)
+end
+
+combine_step(rf) =
+    asmonoid() do a0, b0
+        a = @return_if_reduced a0
+        b0 isa Reduced && return combine_right_reduced(rf, a, b0)
+        return combine(rf, a, b0)
+    end
+
+# The output of `foldxt` is correct regardless of the value of
+# `stoppable`.  Thus, we can use `return_type` here purely for
+# optimization.
+_might_return_reduced(rf, init, coll) =
+    Base.typeintersect(
+        Core.Compiler.return_type(
+            __reduce_dummy,  # simulate the output type of `_reduce`
+            typeof((rf, init, SizedReducible(coll, 1))),
+        ),
+        Reduced,
+    ) !== Union{}
+
+_reduce_dummy(rf, init, coll) =
+    __reduce_dummy(rf, init, SizedReducible(coll, 1))
+
+function __reduce_dummy(rf, init, reducible)
+    if issmall(reducible)
+        return _reduce_basecase(rf, init, reducible.reducible)
+    else
+        left, right = _halve(reducible)
+        a = __reduce_dummy(rf, init, left)
+        b = __reduce_dummy(rf, init, right)
+        a isa Reduced && return a
+        b isa Reduced && return combine_right_reduced(rf, a, b)
+        return combine(rf, a, b)
+    end
+end
+
+foldxt(step::F, xform::Transducer, itr; init = DefaultInit, kwargs...) where {F} =
+    unreduced(transduce_assoc(xform, Completing(step), init, itr; kwargs...))
+
+foldxt(step::F, foldable; kwargs...) where {F} =
+    foldxt(step, extract_transducer(foldable)...; kwargs...)
+
+foldxt(rf; kw...) = itr -> foldxt(rf, itr; kw...)
+
+"""
+    tcopy(xf::Transducer, T, reducible; basesize) :: Union{T, Empty{T}}
+    tcopy(xf::Transducer, reducible::T; basesize) :: Union{T, Empty{T}}
+    tcopy([T,] itr; basesize) :: Union{T, Empty{T}}
+
+Thread-based parallel version of [`copy`](@ref).
+Keyword arguments are passed to [`foldxt`](@ref).
+
+See also: [Parallel processing tutorial](@ref tutorial-parallel)
+(especially [Example: parallel `collect`](@ref tutorial-parallel-collect)).
+
+!!! compat "Transducers.jl 0.4.5"
+
+    New in version 0.4.5.
+
+!!! compat "Transducers.jl 0.4.8"
+
+    `tcopy` now accepts iterator comprehensions and eductions.
+
+# Examples
+```jldoctest
+julia> using Transducers
+
+julia> tcopy(Map(x -> x => x^2), Dict, 2:2)
+Dict{Int64, Int64} with 1 entry:
+  2 => 4
+
+julia> using TypedTables
+
+julia> @assert tcopy(Map(x -> (a=x,)), Table, 1:1) == Table(a=[1])
+
+julia> using StructArrays
+
+julia> @assert tcopy(Map(x -> (a=x,)), StructVector, 1:1) == StructVector(a=[1])
+```
+
+`tcopy` works with iterator comprehensions and eductions (unlike
+[`copy`](@ref), there is no need for manual conversion with
+[`eduction`](@ref)):
+
+```jldoctest; setup = :(using Transducers, StructArrays, DataFrames)
+julia> table = StructVector(a = [1, 2, 3], b = [5, 6, 7]);
+
+julia> @assert tcopy(
+           (A = row.a + 1, B = row.b - 1) for row in table if isodd(row.a)
+       ) == StructVector(A = [2, 4], B = [4, 6])
+
+julia> @assert tcopy(
+           DataFrame,
+           (A = row.a + 1, B = row.b - 1) for row in table if isodd(row.a)
+       ) == DataFrame(A = [2, 4], B = [4, 6])
+
+julia> @assert table |>
+           Filter(row -> isodd(row.a)) |> Map(row -> (A = row.a + 1, B = row.b - 1)) |>
+           tcopy == StructVector(A = [2, 4], B = [4, 6])
+```
+
+If you have [`Cat`](@ref) or [`MapCat`](@ref) at the end of the
+transducer, consider using [`foldxt`](@ref) directly:
+
+```jldoctest
+julia> using Transducers
+       using DataFrames
+
+julia> @assert tcopy(
+           DataFrame,
+           1:2 |> Map(x -> DataFrame(a = [x])) |> MapCat(eachrow);
+           basesize = 1,
+       ) == DataFrame(a = [1, 2])
+
+julia> using BangBang: Empty, append!!
+
+julia> @assert foldxt(
+           append!!,
+           Map(x -> DataFrame(a = [x])),
+           1:2;
+           basesize = 1,
+           # init = Empty(DataFrame),
+       ) == DataFrame(a = [1, 2])
+```
+
+Note that above snippet assumes that it is OK to mutate the dataframe
+returned by the transducer.  Use `init = Empty(DataFrame)` if this is
+not the case.
+
+This approach of using `foldxt` works with other containers; e.g.,
+with `TypedTables.Table`:
+
+```jldoctest; setup = :(using Transducers)
+julia> using TypedTables
+
+julia> @assert foldxt(
+           append!!,
+           Map(x -> Table(a = [x])),
+           1:2;
+           basesize = 1,
+           # init = Empty(Table),
+       ) == Table(a = [1, 2])
+```
+"""
+tcopy(xf::XF, T, reducible::R; kwargs...) where {XF, R} = _tcopy(xf, T, reducible, OutputSize(XF), Base.IteratorSize(R); kwargs...)
+_tcopy(xf, T, reducible, ::Any, ::Any; kwargs...) = foldxt(append!!, Map(SingletonVector) ∘ xf, reducible; init = Empty(T), kwargs...)
+function _tcopy(xf, ::Type{T}, reducible, ::SizeStable, ::Union{Base.HasLength, Base.HasShape};
+                basesize=max(amount(reducible) ÷ Threads.nthreads(), 1), kwargs...) where {T <: Array}
+    chunks = split_into_chunks(reducible, basesize)
+    foldxt(append!!, Map(x -> copy(xf, T, x)), chunks; init = Empty(T), kwargs...)
+end
+
+# This can't be collect(Partition(sz), col) because of https://github.com/JuliaFolds/Transducers.jl/issues/554
+function split_into_chunks(coll, sz)
+    collect(Iterators.partition(coll, sz))
+end
+
+function split_into_chunks(coll::Transducers.ProgressLoggingFoldable, sz)
+    withprogress(collect(Iterators.partition(coll.foldable, sz)); interval=coll.interval)
+end
+
+tcopy(xf, reducible; kwargs...) = tcopy(xf, _materializer(reducible), reducible; kwargs...)
+
+function tcopy(::Type{T}, itr; kwargs...) where {T}
+    xf, foldable = extract_transducer(itr)
+    return tcopy(xf, T, foldable; kwargs...)
+end
+
+function tcopy(itr; kwargs...)
+    xf, foldable = extract_transducer(itr)
+    return tcopy(xf, foldable; kwargs...)
+end
+
+tcopy(xf, T::Type{<:AbstractSet}, reducible; kwargs...) =
+    foldxt(union!!, Map(SingletonVector) ∘ xf, reducible; init = Empty(T), kwargs...)
+
+function tcopy(
+    ::typeof(Map(identity)),
+    T::Type{<:AbstractSet},
+    array::AbstractArray;
+    basesize::Integer = max(1, length(array) ÷ Threads.nthreads()),
+    kwargs...,
+)
+    @argcheck basesize >= 1
+    return foldxt(
+        union!!,
+        Map(identity),
+        Iterators.partition(array, basesize);
+        init = Empty(T),
+        basesize = 1,
+        kwargs...,
+    )
+end
+
+"""
+    tcollect(xf::Transducer, reducible; basesize) :: Union{Vector, Empty{Vector}}
+    tcollect(itr; basesize) :: Union{Vector, Empty{Vector}}
+
+Thread-based parallel version of [`collect`](@ref).
+This is just a short-hand notation of `tcopy(xf, Vector, reducible)`.
+Use [`tcopy`](@ref) to get a container other than a `Vector`.
+
+See also: [Parallel processing tutorial](@ref tutorial-parallel)
+(especially [Example: parallel `collect`](@ref tutorial-parallel-collect)).
+
+!!! compat "Transducers.jl 0.4.5"
+
+    New in version 0.4.5.
+
+!!! compat "Transducers.jl 0.4.8"
+
+    `tcollect` now accepts iterator comprehensions and eductions.
+
+# Examples
+```jldoctest
+julia> using Transducers
+
+julia> tcollect(Map(x -> x^2), 1:2)
+2-element Vector{Int64}:
+ 1
+ 4
+
+julia> tcollect(x^2 for x in 1:2)
+2-element Vector{Int64}:
+ 1
+ 4
+```
+"""
+tcollect(xf, reducible; kwargs...) = tcopy(xf, Vector, reducible; kwargs...)
+tcollect(itr; kwargs...) = tcollect(extract_transducer(itr)...; kwargs...)
+
+verify_nestlevel(lvl::Val{:inf}) = lvl
+verify_nestlevel(lvl::Integer) = verify_nestlevel(Val(Int(lvl)))
+function verify_nestlevel(::Val{n}) where {n}
+    n isa Integer ||
+        throw(ArgumentError("`nestlevel` must be an integer, `Val` of `Int`, or `Val(:inf)`"))
+    lvl = Int(n)
+    lvl > 0 || throw(ArgumentError("`nestlevel` must be positive"))
+    return Val(lvl)
+end
+
+_dec_lvl(lvl::Val{:inf}) = lvl
+_dec_lvl(::Val{n}) where {n} = Val(n - 1)
+
+use_threads_for_inner_cats(rf, basesize, nestlevel) =
+    cats_to_tcats(rf, TCat(basesize), verify_nestlevel(nestlevel))
+
+# TODO: handle `TeeRF` etc?
+cats_to_tcats(rf::R_, innermost_tcat, lvl::Val) =
+    Reduction(xform(rf), cats_to_tcats(inner(rf), innermost_tcat, lvl))
+cats_to_tcats(rf::R_{Union{Cat,TCat}}, innermost_tcat, lvl::Val) =
+    if has(inner(rf), Union{Cat,TCat})
+        if lvl isa Val{1}
+            setxform(rf, innermost_tcat)
+        else
+            Reduction(TCat(1), cats_to_tcats(inner(rf), innermost_tcat, _dec_lvl(lvl)))
+        end
+    else
+        setxform(rf, innermost_tcat)
+    end

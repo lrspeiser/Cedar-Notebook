@@ -6,7 +6,7 @@ license = "Apache-2.0"
 
 [dependencies]
 anyhow = { workspace = true }
-axum = { workspace = true, features = ["macros", "ws"] }
+axum = { workspace = true, features = ["macros", "ws", "multipart"] }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
@@ -20,6 +20,8 @@ futures = "0.3"
 tower-http = { version = "0.5", features = ["cors"] }
 reqwest = { version = "0.12", features = ["json"] }
 tauri = { version = "2.0.0-beta.19", features = ["custom-protocol"] }
+uuid = { workspace = true }
+chrono = { workspace = true }
 [build-dependencies]
 tauri-build = { version = "2.0.0-beta.19" }
 

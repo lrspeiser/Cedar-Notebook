@@ -1,0 +1,29 @@
+.test_template: &test_definition
+  script:
+    - julia -e 'using Pkg; Pkg.add(path="."); Pkg.build("Parquet2"); Pkg.test("Parquet2"; coverage = true)'
+    - julia -e 'using Pkg; Pkg.add("Coverage");
+      import Parquet2; cd(joinpath(dirname(pathof(Parquet2)), ".."));
+      using Coverage; cl, tl = get_summary(process_folder());
+      println("(", cl/tl*100, "%) covered")'
+
+test:1.10:  # LTS test
+  image: julia:1.10
+  <<: *test_definition
+
+test:  # latest test
+  image: julia
+  <<: *test_definition
+
+pages:
+  image: julia
+  stage: deploy
+  script:
+    - apt-get update -qq && apt-get install -y git  # needed by Documenter
+    - julia --project=docs -e 'import Pkg; Pkg.instantiate()'
+    - julia --project=docs docs/make.jl
+    - mv docs/build public  # move to the directory picked up by Gitlab pages
+  artifacts:
+    paths:
+      - public
+  only:
+    - master

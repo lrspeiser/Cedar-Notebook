@@ -1,0 +1,174 @@
+# --- Utilities
+
+"""
+    _unzip(xs::Tuple)
+
+# Examples
+```jldoctest; setup = :(using Transducers: _unzip)
+julia> _unzip(((1, 2, 3), (4, 5, 6)))
+((1, 4), (2, 5), (3, 6))
+```
+"""
+_unzip(xs::Tuple{Vararg{NTuple{N,Any}}}) where {N} = ntuple(i -> map(x -> x[i], xs), N)
+
+arguments(xs::Iterators.Zip) = xs.is
+const _Zip = Iterators.Zip
+
+_Channel(f, ::Type{T}, size; kwargs...) where {T} = Channel{T}(f, size; kwargs...)
+
+_typeof(::Type{T}) where {T} = Type{T}
+_typeof(::T) where {T} = T
+
+const ValBool = Union{Val{false}, Val{true}}
+
+@generated function default_constructorof(::Type{T}) where T
+    getfield(parentmodule(T), nameof(T))
+end
+
+function _materializer(xs)
+    T = Tables.materializer(xs)
+    return T isa Type ? T : _materializer(typeof(xs))
+end
+
+function _materializer(::Type{T}) where T
+    S = ConstructionBase.constructorof(T)
+    return S isa Type ? S : T
+end
+
+prefixed_type_name(@nospecialize x) =
+    sprint(show, typeof(x), context = :module => Base)
+# `:module => Base` to enforce that the type is prefixed even when
+# `typeof(x)` is imported in `Main`.  See:
+# https://github.com/JuliaLang/julia/pull/29466
+
+const DenseSubVector{T} =
+    SubArray{T, 1, Vector{T}, Tuple{UnitRange{Int}}, true}
+
+
+const _non_executable_transducer_msg = """
+Output type of the transducer is inferred to be a `Union{}`.  This
+probably means one or more of the composed transducers throw.
+"""
+
+@inline _poptail(xs) = _poptail_impl(xs...)
+@inline _poptail_impl(a) = (), a
+@inline function _poptail_impl(a, xs...)
+    head, tail = _poptail_impl(xs...)
+    return (a, head...), tail
+end
+
+Base.@pure nthtype(::Val{1}, ::Type{T}) where {T <: Tuple} =
+    Base.tuple_type_head(T)
+
+Base.@pure nthtype(::Val{n}, ::Type{T}) where {n, T <: Tuple} =
+    nthtype(Val(n - 1), Base.tuple_type_tail(T))
+
+_cljapiurl(name) =
+    "https://clojure.github.io/clojure/clojure.core-api.html#clojure.core/$name"
+_cljref(name) =
+    "[`$name` in Clojure]($(_cljapiurl(name)))"
+_thx_clj(name) =
+    "This API is modeled after $(_cljref(name))."
+
+
+# https://github.com/JuliaLang/julia/pull/30575
+const _true_str = sprint(show, true; context=:typeinfo => Bool)
+const _false_str = sprint(show, false; context=:typeinfo => Bool)
+
+
+# Just like `Function` but for defining some common methods.
+abstract type _Function <: Function end
+
+# Avoid `Function` fallbacks:
+@nospecialize
+Base.show(io::IO, ::MIME"text/plain", f::_Function) = show(io, f)
+Base.print(io::IO, f::_Function) = show(io, f)
+@specialize
+
+
+# A macro for "manual Union splitting".  It is sometimes useful to let
+# the compiler know that it is beneficial to type-specialize `body`.
+# * https://github.com/JuliaFolds/Transducers.jl/pull/188
+# * https://github.com/JuliaLang/julia/pull/34293#discussion_r363550608
+macro manual_union_split(cond, body)
+    quote
+        if $cond
+            $body
+        else
+            $body
+        end
+    end |> esc
+end
+
+@inline _firstindex(arr) = firstindex(arr)
+@inline _lastindex(arr) = lastindex(arr)
+
+# Define `firstindex` and `lastindex` for `Broadcasted` with linear
+# index style:
+@inline _firstindex(bc::Broadcasted) = first((axes(bc)::Tuple{Any})[1])
+@inline _lastindex(bc::Broadcasted) = last((axes(bc)::Tuple{Any})[1])
+
+# Define `CartesianIndices` for `Broadcasted`
+@inline _CartesianIndices(arr) = CartesianIndices(arr)
+@inline _CartesianIndices(bc::Broadcasted) = CartesianIndices(axes(bc)::Tuple)
+
+# Define `IndexStyle` for `Broadcasted`
+_IndexStyle(arr) = IndexStyle(arr)
+_IndexStyle(bc::Broadcasted) = _IndexStyle(typeof(bc))
+_IndexStyle(::Type{<:Broadcasted{<:Any,<:Tuple{Any}}}) = IndexLinear()
+_IndexStyle(::Type{<:Broadcasted{<:Any}}) = IndexCartesian()
+
+
+struct Err{T}
+    value::T
+end
+
+struct Ok{T}
+    value::T
+end
+
+
+struct Promise
+    value::Base.RefValue{Any}
+    isset::Threads.Atomic{Bool}
+    notify::Threads.Condition
+end
+
+Promise() = Promise(Ref{Any}(), Threads.Atomic{Bool}(false), Threads.Condition())
+
+tryfetch(::Nothing) = nothing
+tryfetch(p::Promise) = p.isset[] ? Some(p.value[]) : nothing
+
+function tryput!(p::Promise, value)
+    p.isset[] && return Some(p.value[])
+    lock(p.notify) do
+        p.isset[] && return Some(p.value[])
+        p.value[] = value
+        p.isset[] = true
+        notify(p.notify)
+        return nothing
+    end
+end
+
+function Base.fetch(p::Promise)
+    p.isset[] && return p.value[]
+    lock(p.notify) do
+        while !p.isset[]
+            wait(p.notify)
+        end
+        return p.value[]
+    end
+end
+
+
+function async_foreach(f, xs)
+    @sync for x in xs
+        @async f(x)
+    end
+end
+
+function sync_spawn_foreach(f, xs)
+    for x in xs
+        wait(@spawn f(x))
+    end
+end

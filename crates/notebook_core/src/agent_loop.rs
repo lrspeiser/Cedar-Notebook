@@ -19,14 +19,23 @@ pub struct AgentConfig {
     pub app_shared_token: Option<String>,
 }
 
+#[derive(Debug, Clone)]
+pub struct AgentResult {
+    pub final_output: Option<String>,
+    pub turns_used: usize,
+}
+
 #[tracing::instrument(skip_all, fields(run_id = %run_dir.file_name().unwrap().to_str().unwrap(), user_prompt = %user_prompt))]
-pub async fn agent_loop(run_dir: &Path, user_prompt: &str, max_turns: usize, cfg: AgentConfig) -> Result<()> {
+pub async fn agent_loop(run_dir: &Path, user_prompt: &str, max_turns: usize, cfg: AgentConfig) -> Result<AgentResult> {
     fs::create_dir_all(run_dir)?;
     let mut transcript: Vec<TranscriptItem> = vec![TranscriptItem{ role: "user".into(), content: user_prompt.into() }];
     let mut last_tool_result: Option<serde_json::Value> = None;
 
     // Build simple data catalog metadata for the prompt (registered datasets, if any)
     let mut data_catalog: Vec<String> = vec![];
+    let mut duckdb_datasets: Vec<String> = vec![];
+    
+    // Check for parquet files in registry
     if let Ok(cwd) = std::env::current_dir() {
         let reg = crate::data::registry::DatasetRegistry::default_under_repo(&cwd);
         if let Ok(rd) = std::fs::read_dir(&reg.root) {
@@ -39,14 +48,52 @@ pub async fn agent_loop(run_dir: &Path, user_prompt: &str, max_turns: usize, cfg
             }
         }
     }
+    
+    // Check for DuckDB datasets
+    if let Ok(root) = crate::util::default_runs_root() {
+        let db_path = root.join("metadata.duckdb");
+        if db_path.exists() {
+            if let Ok(manager) = crate::duckdb_metadata::MetadataManager::new(&db_path) {
+                if let Ok(datasets) = manager.list_datasets() {
+                    for ds in datasets {
+                        duckdb_datasets.push(format!(
+                            "{} ({}): {} - {} rows, {} columns",
+                            ds.title, ds.file_name, ds.description, 
+                            ds.row_count.unwrap_or(0), ds.column_info.len()
+                        ));
+                    }
+                }
+            }
+        }
+    }
 
     for turn in 0..max_turns {
         let mut sys = system_prompt();
+        
+        // Add parquet datasets if available
         if !data_catalog.is_empty() {
             sys.push_str("\nData catalog (registered parquet tables): ");
             sys.push_str(&data_catalog.join(", "));
-            sys.push_str("\nIf none are useful for the task, you may use your own knowledge to write Julia code, but state that you are doing so in user_message.\n");
-        } else {
+            sys.push_str("\n");
+        }
+        
+        // Add DuckDB datasets if available
+        if !duckdb_datasets.is_empty() {
+            sys.push_str("\n=== Available Datasets in DuckDB ===\n");
+            sys.push_str("You can query these datasets using DuckDB in Julia. Connect to the metadata database and query the data files:\n");
+            for ds in &duckdb_datasets {
+                sys.push_str(&format!("  - {}\n", ds));
+            }
+            sys.push_str("\nTo query these datasets, use DuckDB.jl in Julia code like:\n");
+            sys.push_str("```julia\n");
+            sys.push_str("using DuckDB\n");
+            sys.push_str("db = DuckDB.DB()  # or connect to the metadata.duckdb\n");
+            sys.push_str("# Then query CSV files directly or load from metadata\n");
+            sys.push_str("result = DuckDB.query(db, \"SELECT * FROM read_csv_auto('path/to/file.csv') LIMIT 10\")\n");
+            sys.push_str("```\n");
+        }
+        
+        if data_catalog.is_empty() && duckdb_datasets.is_empty() {
             sys.push_str("\nNo registered datasets found; you may use your own knowledge to write Julia code, but state that you are doing so in user_message.\n");
         }
         let cycle_input = CycleInput {
@@ -86,16 +133,25 @@ pub async fn agent_loop(run_dir: &Path, user_prompt: &str, max_turns: usize, cfg
                 println!("Cedar asks: {}", q);
                 // In CLI, we stop here and let user re-run agent with appended input, or we could read stdin.
                 write_card(run_dir, "question", &q, json!({ "turn": turn }))?;
-                break;
+                return Ok(AgentResult {
+                    final_output: Some(q),
+                    turns_used: turn + 1,
+                });
             }
             CycleDecision::Final { user_output } => {
                 println!("{}", user_output);
                 write_card(run_dir, "final", &user_output, json!({ "turn": turn, "tool_context": last_tool_result }))?;
-                break;
+                return Ok(AgentResult {
+                    final_output: Some(user_output),
+                    turns_used: turn + 1,
+                });
             }
         }
     }
-    Ok(())
+    Ok(AgentResult {
+        final_output: None,
+        turns_used: max_turns,
+    })
 }
 
 fn persist_tool_outcome(run_dir: &Path, tool: &str, out: &ToolOutcome) -> Result<()> {

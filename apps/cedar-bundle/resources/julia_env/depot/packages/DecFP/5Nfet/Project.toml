@@ -1,0 +1,23 @@
+name = "DecFP"
+uuid = "55939f99-70c6-5e9b-8bb0-5071ed7d61fd"
+version = "1.4.1"
+
+[deps]
+DecFP_jll = "47200ebd-12ce-5be5-abb7-8e082af23329"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
+
+[compat]
+DecFP_jll = "2.0.3"
+SpecialFunctions = "0.8, 0.9, 0.10, 0.11, 1, 2"
+julia = "1.7"
+Printf = "<0.0.1, 1"
+Random = "<0.0.1, 1"
+
+[extras]
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test", "Printf"]

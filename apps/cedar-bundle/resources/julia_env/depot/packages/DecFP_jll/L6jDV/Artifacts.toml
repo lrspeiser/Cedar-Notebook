@@ -1,0 +1,143 @@
+[[DecFP]]
+arch = "aarch64"
+git-tree-sha1 = "916629a1457bf01490e5086c3f3fbcc421f30272"
+os = "macos"
+
+    [[DecFP.download]]
+    sha256 = "7b49477bb46af3b23aebd3e3b67f6935f0f9d7c5dc2fcf091a8bb2b2b55fb095"
+    url = "https://github.com/JuliaBinaryWrappers/DecFP_jll.jl/releases/download/DecFP-v2.0.3+1/DecFP.v2.0.3.aarch64-apple-darwin.tar.gz"
+[[DecFP]]
+arch = "aarch64"
+git-tree-sha1 = "09f25122c2ba12b3e7d71b3f77ee44670f010250"
+libc = "glibc"
+os = "linux"
+
+    [[DecFP.download]]
+    sha256 = "267d1ef78cc9a0227eb803e4389ca1e90c5ed04acd9bf0201642a2c3b301dab2"
+    url = "https://github.com/JuliaBinaryWrappers/DecFP_jll.jl/releases/download/DecFP-v2.0.3+1/DecFP.v2.0.3.aarch64-linux-gnu.tar.gz"
+[[DecFP]]
+arch = "aarch64"
+git-tree-sha1 = "0d54d41c4ed3653af2a6b032a6f7c3c8eda2eead"
+libc = "musl"
+os = "linux"
+
+    [[DecFP.download]]
+    sha256 = "72f217fbb9ff74214647c887c57949480d399d43efd8ee6403f1cd3e30d5ebba"
+    url = "https://github.com/JuliaBinaryWrappers/DecFP_jll.jl/releases/download/DecFP-v2.0.3+1/DecFP.v2.0.3.aarch64-linux-musl.tar.gz"
+[[DecFP]]
+arch = "armv6l"
+call_abi = "eabihf"
+git-tree-sha1 = "1ad078bacd5fb6f65bf16c40cf59b0b2f485f0e5"
+libc = "glibc"
+os = "linux"
+
+    [[DecFP.download]]
+    sha256 = "e67c5acffe786961501c281398569b6d869322bcab4dcdcde580708b93bb8ae8"
+    url = "https://github.com/JuliaBinaryWrappers/DecFP_jll.jl/releases/download/DecFP-v2.0.3+1/DecFP.v2.0.3.armv6l-linux-gnueabihf.tar.gz"
+[[DecFP]]
+arch = "armv6l"
+call_abi = "eabihf"
+git-tree-sha1 = "b50029b7ce248811a72aaf38acb1c16990ba8ee9"
+libc = "musl"
+os = "linux"
+
+    [[DecFP.download]]
+    sha256 = "c9073aa73ae7ec093cd1711d92ba55fbc994d5f58605875155bce32b0bd2ce68"
+    url = "https://github.com/JuliaBinaryWrappers/DecFP_jll.jl/releases/download/DecFP-v2.0.3+1/DecFP.v2.0.3.armv6l-linux-musleabihf.tar.gz"
+[[DecFP]]
+arch = "armv7l"
+call_abi = "eabihf"
+git-tree-sha1 = "c8eacc4701ec0281eda979b4ab40d77c6efc74d3"
+libc = "glibc"
+os = "linux"
+
+    [[DecFP.download]]
+    sha256 = "990cfa85d8d759eac1447184c2b179d7212250d56dcb009720dc68d19b86f7b9"
+    url = "https://github.com/JuliaBinaryWrappers/DecFP_jll.jl/releases/download/DecFP-v2.0.3+1/DecFP.v2.0.3.armv7l-linux-gnueabihf.tar.gz"
+[[DecFP]]
+arch = "armv7l"
+call_abi = "eabihf"
+git-tree-sha1 = "e3f6ac1b13c62e1d655cf1ad05178759e929b35b"
+libc = "musl"
+os = "linux"
+
+    [[DecFP.download]]
+    sha256 = "ae761d5bd9acca2fe50fb93f6830c42934173e00d3f49d9b2c9e42b9218b7aaf"
+    url = "https://github.com/JuliaBinaryWrappers/DecFP_jll.jl/releases/download/DecFP-v2.0.3+1/DecFP.v2.0.3.armv7l-linux-musleabihf.tar.gz"
+[[DecFP]]
+arch = "i686"
+git-tree-sha1 = "b898d132eb2aa92a1780d0924459131460e9f919"
+libc = "glibc"
+os = "linux"
+
+    [[DecFP.download]]
+    sha256 = "9d1977173b909a302d0011667eaf0e76aeb6dd0c22ec17c7a94ee6320c748eb2"
+    url = "https://github.com/JuliaBinaryWrappers/DecFP_jll.jl/releases/download/DecFP-v2.0.3+1/DecFP.v2.0.3.i686-linux-gnu.tar.gz"
+[[DecFP]]
+arch = "i686"
+git-tree-sha1 = "5027515200cc976f4a94a371812cf57ca5c2e239"
+libc = "musl"
+os = "linux"
+
+    [[DecFP.download]]
+    sha256 = "8e6d0b7846326c45793e93bc1b9d92847ba65093ee998399d3fc0f86d24b41fa"
+    url = "https://github.com/JuliaBinaryWrappers/DecFP_jll.jl/releases/download/DecFP-v2.0.3+1/DecFP.v2.0.3.i686-linux-musl.tar.gz"
+[[DecFP]]
+arch = "i686"
+git-tree-sha1 = "d266ccef464df163454e68d85e022a196fba493a"
+os = "windows"
+
+    [[DecFP.download]]
+    sha256 = "b63eae886879245820aee00e0a9da7e63f728a93cd42e8cc19a18578fde617a8"
+    url = "https://github.com/JuliaBinaryWrappers/DecFP_jll.jl/releases/download/DecFP-v2.0.3+1/DecFP.v2.0.3.i686-w64-mingw32.tar.gz"
+[[DecFP]]
+arch = "powerpc64le"
+git-tree-sha1 = "a6d8393a3f07f289cc19f6ac6d58f40be0a706d9"
+libc = "glibc"
+os = "linux"
+
+    [[DecFP.download]]
+    sha256 = "4267a475c0a487c626eafb403326b2cf78ce665d6fe684437975162420507a7c"
+    url = "https://github.com/JuliaBinaryWrappers/DecFP_jll.jl/releases/download/DecFP-v2.0.3+1/DecFP.v2.0.3.powerpc64le-linux-gnu.tar.gz"
+[[DecFP]]
+arch = "x86_64"
+git-tree-sha1 = "c0775541cb82b655fc91ce13caf4b3e5825f37e4"
+os = "macos"
+
+    [[DecFP.download]]
+    sha256 = "af7e749687e73ecf5d5f68273fd66d4fa52c5e1e2c47451e3188484802a693bb"
+    url = "https://github.com/JuliaBinaryWrappers/DecFP_jll.jl/releases/download/DecFP-v2.0.3+1/DecFP.v2.0.3.x86_64-apple-darwin.tar.gz"
+[[DecFP]]
+arch = "x86_64"
+git-tree-sha1 = "9c6b53e1922cc362e083fadaf4ecd521326e2e1e"
+libc = "glibc"
+os = "linux"
+
+    [[DecFP.download]]
+    sha256 = "bee62e0d2f2822b87bdf215fb2fe25b16917c789fb847e78443f41d255b449f0"
+    url = "https://github.com/JuliaBinaryWrappers/DecFP_jll.jl/releases/download/DecFP-v2.0.3+1/DecFP.v2.0.3.x86_64-linux-gnu.tar.gz"
+[[DecFP]]
+arch = "x86_64"
+git-tree-sha1 = "8d3fcb1c8c4b0f7905cb59e1fa3fa4c317f10990"
+libc = "musl"
+os = "linux"
+
+    [[DecFP.download]]
+    sha256 = "58297e2a5cdaa03a3423e51acc46ee4e5ef3b260ae07925b993cb0fea3c64f5f"
+    url = "https://github.com/JuliaBinaryWrappers/DecFP_jll.jl/releases/download/DecFP-v2.0.3+1/DecFP.v2.0.3.x86_64-linux-musl.tar.gz"
+[[DecFP]]
+arch = "x86_64"
+git-tree-sha1 = "baa517c74d40cfe6367c944f852c7a10616d87a6"
+os = "freebsd"
+
+    [[DecFP.download]]
+    sha256 = "e80c03033270f10fdd9cd9fbd7c3c482344151b190f422248dec919f8c7e0950"
+    url = "https://github.com/JuliaBinaryWrappers/DecFP_jll.jl/releases/download/DecFP-v2.0.3+1/DecFP.v2.0.3.x86_64-unknown-freebsd.tar.gz"
+[[DecFP]]
+arch = "x86_64"
+git-tree-sha1 = "a80af3a2089f035747f3d099c37b6d884080592c"
+os = "windows"
+
+    [[DecFP.download]]
+    sha256 = "f22ae7d620ccec75f570d1cabb8d6b2b4db314b0f321e798a56d53fdeaee4f02"
+    url = "https://github.com/JuliaBinaryWrappers/DecFP_jll.jl/releases/download/DecFP-v2.0.3+1/DecFP.v2.0.3.x86_64-w64-mingw32.tar.gz"

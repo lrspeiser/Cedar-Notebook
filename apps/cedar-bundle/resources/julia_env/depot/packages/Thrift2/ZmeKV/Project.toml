@@ -1,0 +1,21 @@
+name = "Thrift2"
+uuid = "9be31aac-5446-47db-bfeb-416acd2e4415"
+authors = ["ExpandingMan <savastio@protonmail.com> and contributors"]
+version = "0.2.1"
+
+[deps]
+MacroTools = "1914dd2f-81c6-5fcd-8719-6d5c9610ff09"
+OrderedCollections = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
+PrecompileTools = "aea7be01-6a6a-4083-8856-8a6e6704d82a"
+
+[compat]
+MacroTools = "0.5"
+OrderedCollections = "1"
+PrecompileTools = "1"
+julia = "1.6"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]

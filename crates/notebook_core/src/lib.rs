@@ -5,3 +5,4 @@ pub mod data;
 pub mod runs;
 pub mod cards;
 pub mod util;
+pub mod duckdb_metadata;

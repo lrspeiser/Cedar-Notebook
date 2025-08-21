@@ -1,0 +1,13 @@
+/Manifest.toml
+/docs/build/
+/test/data/ignore
+/test/pyenv/fastparquet/
+/test/*.parq
+/test/_scrap*
+/test/Project.toml
+/test/Manifest.toml
+/test/devenv/Manifest.toml
+/test/CondaPkg.toml
+poetry.lock
+.minio.sys
+.CondaPkg

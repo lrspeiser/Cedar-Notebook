@@ -203,7 +203,8 @@ async fn cmd_agent(runs_root: &Path, user_prompt: &str) -> Result<()> {
         relay_url,
         app_shared_token,
     };
-    agent_loop(&run.dir, user_prompt, 30, cfg).await
+    let _result = agent_loop(&run.dir, user_prompt, 30, cfg).await?;
+    Ok(())
 }
 
 async fn cmd_ingest(runs_root: &Path, path: PathBuf) -> Result<()> {

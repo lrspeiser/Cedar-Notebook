@@ -77,7 +77,6 @@ JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
 Parquet2 = "98572fba-bba0-415d-956f-fa77e587d26d"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
-DuckDB = "3c7084bd-78db-5bbc-bce7-04d822d92ef8"
 HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
 EOF
 

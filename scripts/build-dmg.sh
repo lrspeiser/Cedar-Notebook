@@ -40,7 +40,7 @@ echo -e "${BLUE}Creating app bundle...${NC}"
 cargo bundle --release
 
 # The bundle should be created at target/release/bundle/osx/Cedar.app
-BUNDLE_PATH="target/release/bundle/osx/Cedar.app"
+BUNDLE_PATH="../../target/release/bundle/osx/Cedar.app"
 
 if [ ! -d "$BUNDLE_PATH" ]; then
     echo "❌ Bundle not found at $BUNDLE_PATH"

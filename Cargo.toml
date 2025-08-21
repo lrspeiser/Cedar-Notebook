@@ -3,6 +3,7 @@ members = [
 "crates/notebook_core",
     "crates/cedar-cli",
     "apps/cedar-egui",
+    "apps/cedar-bundle",
     "crates/cedar-smoke",
     "crates/notebook_api",
     "crates/notebook_server",

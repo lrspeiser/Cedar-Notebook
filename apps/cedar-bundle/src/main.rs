@@ -1,5 +1,4 @@
 use std::process::Command;
-use std::thread;
 use std::time::Duration;
 use std::net::SocketAddr;
 
@@ -8,7 +7,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🌲 Cedar Agent Starting...");
     
     // Start the backend server in a separate tokio task
-    let server_handle = tokio::spawn(async {
+    let server_handle = tokio::spawn(async move {
         start_backend_server().await
     });
     
@@ -23,12 +22,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Press Ctrl+C to stop the server");
     
     // Wait for the server to complete (it won't unless there's an error)
-    server_handle.await??;
-    
-    Ok(())
+    match server_handle.await {
+        Ok(Ok(())) => Ok(()),
+        Ok(Err(e)) => Err(e as Box<dyn std::error::Error>),
+        Err(e) => Err(Box::new(e) as Box<dyn std::error::Error>),
+    }
 }
 
-async fn start_backend_server() -> Result<(), Box<dyn std::error::Error>> {
+async fn start_backend_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use axum::{
         routing::{get, post},
         Router,
@@ -62,7 +63,7 @@ async fn start_backend_server() -> Result<(), Box<dyn std::error::Error>> {
 // Placeholder for the actual query handler
 // In production, this would call the notebook_server functions
 async fn handle_query(
-    axum::Json(body): axum::Json<serde_json::Value>
+    axum::Json(_body): axum::Json<serde_json::Value>
 ) -> axum::Json<serde_json::Value> {
     // This would call the actual notebook_server::handle_submit_query
     axum::Json(serde_json::json!({

@@ -256,40 +256,7 @@ fn init_tracing() {
 async fn main() -> anyhow::Result<()> {
     init_tracing();
     
-    // Get port from environment or use default
-    let port: u16 = std::env::var("PORT")
-        .unwrap_or_else(|_| "8080".to_string())
-        .parse()
-        .unwrap_or(8080);
-    
-    // Build the router with all routes
-    let app = Router::new()
-        // Health check
-        .route("/health", get(health))
-        // Run management
-        .route("/runs", get(list_runs))
-        .route("/runs/:run_id/cards", get(list_cards))
-        .route("/runs/:run_id/artifacts/:file", get(download_artifact))
-        // Command execution
-        .route("/commands/run_julia", axum::routing::post(cmd_run_julia))
-        .route("/commands/run_shell", axum::routing::post(cmd_run_shell))
-        .route("/commands/submit_query", axum::routing::post(http_submit_query))
-        // SSE events
-        .route("/runs/:run_id/events", get(sse_run_events))
-        // Add CORS layer for cross-origin requests
-        .layer(
-            CorsLayer::new()
-                .allow_origin(Any)
-                .allow_methods(Any)
-                .allow_headers(Any)
-        );
-    
-    let addr = SocketAddr::from(([127, 0, 0, 1], port));
-    tracing::info!("Starting server on {}", addr);
-    
-    // Start the server
-    let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, app).await?;
-    
-    Ok(())
+    // Use the serve() function from lib.rs which has all the routes including /config/openai_key
+    // See docs/openai-key-flow.md for the OpenAI key management strategy
+    notebook_server::serve().await
 }

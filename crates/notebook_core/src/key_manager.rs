@@ -8,6 +8,7 @@ use std::path::PathBuf;
 pub struct KeyManager {
     cache_path: PathBuf,
     server_url: Option<String>,
+    app_token: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -35,62 +36,98 @@ impl KeyManager {
         
         Ok(Self {
             cache_path: cache_dir.join("openai_key.json"),
-            server_url: std::env::var("CEDAR_SERVER_URL").ok(),
+            server_url: std::env::var("CEDAR_SERVER_URL").ok()
+                .or_else(|| std::env::var("CEDAR_KEY_URL").ok()),
+            app_token: std::env::var("APP_SHARED_TOKEN").ok(),
         })
     }
     
     /// Fetch OpenAI API key from server and cache it locally
     /// This is called once at app startup to provision the key for the session
+    /// Supports both the relay service (/v1/key) and notebook server (/config/openai_key)
     /// See docs/openai-key-flow.md for the complete flow
     pub async fn fetch_key_from_server(&self) -> Result<String> {
         let server_url = self.server_url
             .clone()
             .or_else(|| std::env::var("CEDAR_SERVER_URL").ok())
+            .or_else(|| std::env::var("CEDAR_KEY_URL").ok())
             .unwrap_or_else(|| "http://localhost:8080".to_string());
         
-        let url = format!("{}/config/openai_key", server_url.trim_end_matches('/'));
+        // Try relay service endpoint first (for Render deployment)
+        // Then fall back to notebook server endpoint
+        let endpoints = vec![
+            format!("{}/v1/key", server_url.trim_end_matches('/')),
+            format!("{}/config/openai_key", server_url.trim_end_matches('/'))
+        ];
         
-        eprintln!("[cedar] Fetching OpenAI key from server: {}", url);
-        
-        // Make HTTP request to server
         let client = reqwest::Client::new();
-        let response = client
-            .get(&url)
-            .send()
-            .await
-            .context("Failed to connect to Cedar server")?;
         
-        if !response.status().is_success() {
-            let status = response.status();
-            let error_text = response.text().await.unwrap_or_default();
-            anyhow::bail!("Server returned error {}: {}", status, error_text);
+        for url in endpoints {
+            eprintln!("[cedar] Trying to fetch OpenAI key from: {}", url);
+            
+            let mut request = client.get(&url);
+            
+            // Add authentication token if available
+            if let Some(ref token) = self.app_token {
+                request = request.header("x-app-token", token);
+            }
+            
+            let response = match request.send().await {
+                Ok(resp) => resp,
+                Err(_) => continue, // Try next endpoint
+            };
+            
+            if response.status().is_success() {
+                // Try to parse the response
+                let text = response.text().await?;
+                
+                // Try to parse as ServerKeyResponse first (notebook server format)
+                if let Ok(key_response) = serde_json::from_str::<ServerKeyResponse>(&text) {
+                    if Self::is_valid_openai_key(&key_response.openai_api_key) {
+                        // Cache the key locally
+                        let cached = CachedKey {
+                            api_key: key_response.openai_api_key.clone(),
+                            source: key_response.source,
+                            cached_at: chrono::Utc::now(),
+                        };
+                        
+                        let json = serde_json::to_string_pretty(&cached)?;
+                        std::fs::write(&self.cache_path, json)
+                            .context("Failed to cache OpenAI key")?;
+                        
+                        let fingerprint = Self::key_fingerprint(&key_response.openai_api_key);
+                        eprintln!("[cedar] Successfully fetched and cached OpenAI key from {} (fingerprint: {})", url, fingerprint);
+                        
+                        return Ok(key_response.openai_api_key);
+                    }
+                }
+                
+                // Try to parse as relay service format (just has openai_api_key field)
+                if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(&text) {
+                    if let Some(key) = json_val.get("openai_api_key").and_then(|v| v.as_str()) {
+                        if Self::is_valid_openai_key(key) {
+                            // Cache the key locally
+                            let cached = CachedKey {
+                                api_key: key.to_string(),
+                                source: "server".to_string(),
+                                cached_at: chrono::Utc::now(),
+                            };
+                            
+                            let json = serde_json::to_string_pretty(&cached)?;
+                            std::fs::write(&self.cache_path, json)
+                                .context("Failed to cache OpenAI key")?;
+                            
+                            let fingerprint = Self::key_fingerprint(key);
+                            eprintln!("[cedar] Successfully fetched and cached OpenAI key from {} (fingerprint: {})", url, fingerprint);
+                            
+                            return Ok(key.to_string());
+                        }
+                    }
+                }
+            }
         }
         
-        let key_response: ServerKeyResponse = response
-            .json()
-            .await
-            .context("Failed to parse server response")?;
-        
-        // Validate the key
-        if !Self::is_valid_openai_key(&key_response.openai_api_key) {
-            anyhow::bail!("Server returned invalid OpenAI key format");
-        }
-        
-        // Cache the key locally
-        let cached = CachedKey {
-            api_key: key_response.openai_api_key.clone(),
-            source: key_response.source,
-            cached_at: chrono::Utc::now(),
-        };
-        
-        let json = serde_json::to_string_pretty(&cached)?;
-        std::fs::write(&self.cache_path, json)
-            .context("Failed to cache OpenAI key")?;
-        
-        let fingerprint = Self::key_fingerprint(&key_response.openai_api_key);
-        eprintln!("[cedar] Successfully fetched and cached OpenAI key from server (fingerprint: {})", fingerprint);
-        
-        Ok(key_response.openai_api_key)
+        anyhow::bail!("Failed to fetch OpenAI key from any server endpoint. Check server configuration and authentication.")
     }
     
     /// Get the OpenAI API key, fetching from server if needed

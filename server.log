@@ -8,22 +8,101 @@ warning: unused import: `params`
 
 warning: `notebook_core` (lib) generated 1 warning (run `cargo fix --lib -p notebook_core` to apply 1 suggestion)
    Compiling notebook_server v0.0.1 (/Users/leonardspeiser/Projects/cedarcli/crates/notebook_server)
-   Compiling cedar-bundle v1.0.0 (/Users/leonardspeiser/Projects/cedarcli/apps/cedar-bundle)
-warning: function `get_html_path` is never used
-   --> apps/cedar-bundle/src/main.rs:140:4
-    |
-140 | fn get_html_path() -> PathBuf {
-    |    ^^^^^^^^^^^^^
-    |
-    = note: `#[warn(dead_code)]` on by default
+warning: unused imports: `Any` and `CorsLayer`
+ --> crates/notebook_server/src/main.rs:3:24
+  |
+3 | use tower_http::cors::{CorsLayer, Any};
+  |                        ^^^^^^^^^  ^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
 
-warning: `cedar-bundle` (bin "cedar-bundle") generated 1 warning
-    Finished `release` profile [optimized] target(s) in 4.66s
-     Running `target/release/cedar-bundle`
-🌲 Cedar Agent Starting...
-Starting Cedar backend server...
+warning: unused imports: `Router` and `routing::get`
+ --> crates/notebook_server/src/main.rs:4:109
+  |
+4 | use axum::{extract::{Path, Query}, http::StatusCode, response::{IntoResponse, Response, sse::{Sse, Event}}, routing::get, Json, Router};
+  |                                                                                                             ^^^^^^^^^^^^        ^^^^^^
+
+warning: unused import: `std::net::SocketAddr`
+ --> crates/notebook_server/src/main.rs:6:5
+  |
+6 | use std::net::SocketAddr;
+  |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `health` is never used
+ --> crates/notebook_server/src/main.rs:9:10
+  |
+9 | async fn health() -> &'static str { "ok" }
+  |          ^^^^^^
+  |
+  = note: `#[warn(dead_code)]` on by default
+
+warning: field `limit` is never read
+  --> crates/notebook_server/src/main.rs:12:25
+   |
+12 | struct ListRunsParams { limit: Option<usize> }
+   |        --------------   ^^^^^
+   |        |
+   |        field in this struct
+
+warning: function `list_runs` is never used
+  --> crates/notebook_server/src/main.rs:14:10
+   |
+14 | async fn list_runs(Query(q): Query<ListRunsParams>) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+   |          ^^^^^^^^^
+
+warning: function `list_cards` is never used
+  --> crates/notebook_server/src/main.rs:24:10
+   |
+24 | async fn list_cards(Path(run_id): Path<String>) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+   |          ^^^^^^^^^^
+
+warning: function `download_artifact` is never used
+  --> crates/notebook_server/src/main.rs:43:10
+   |
+43 | async fn download_artifact(Path((run_id, file)): Path<(String, String)>) -> Result<Response, (StatusCode, String)> {
+   |          ^^^^^^^^^^^^^^^^^
+
+warning: field `code` is never read
+  --> crates/notebook_server/src/main.rs:62:23
+   |
+62 | struct RunJuliaBody { code: String }
+   |        ------------   ^^^^
+   |        |
+   |        field in this struct
+
+warning: function `cmd_run_julia` is never used
+  --> crates/notebook_server/src/main.rs:64:10
+   |
+64 | async fn cmd_run_julia(Json(body): Json<RunJuliaBody>) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+   |          ^^^^^^^^^^^^^
+
+warning: fields `cmd`, `cwd`, and `timeout_secs` are never read
+  --> crates/notebook_server/src/main.rs:76:23
+   |
+76 | struct RunShellBody { cmd: String, cwd: Option<String>, timeout_secs: Option<u64> }
+   |        ------------   ^^^          ^^^                  ^^^^^^^^^^^^
+   |        |
+   |        fields in this struct
+
+warning: function `cmd_run_shell` is never used
+  --> crates/notebook_server/src/main.rs:78:10
+   |
+78 | async fn cmd_run_shell(Json(body): Json<RunShellBody>) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+   |          ^^^^^^^^^^^^^
+
+warning: function `sse_run_events` is never used
+  --> crates/notebook_server/src/main.rs:89:10
+   |
+89 | async fn sse_run_events(axum::extract::Path(_run_id): axum::extract::Path<String>) -> Sse<impl futures::Stream<Item = Result<Event, std::...
+   |          ^^^^^^^^^^^^^^
+
+warning: function `http_submit_query` is never used
+   --> crates/notebook_server/src/main.rs:233:10
+    |
+233 | async fn http_submit_query(
+    |          ^^^^^^^^^^^^^^^^^
+
+warning: `notebook_server` (bin "notebook_server") generated 14 warnings (run `cargo fix --bin "notebook_server"` to apply 3 suggestions)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.58s
+     Running `target/debug/notebook_server`
 ✅ Cedar server running on http://localhost:8080
-Opening Cedar web interface...
-Opening http://localhost:8080 in browser...
-Cedar is running at http://localhost:8080
-The app will continue running in the background.

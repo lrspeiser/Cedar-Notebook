@@ -101,6 +101,19 @@ pub async fn agent_loop(run_dir: &Path, user_prompt: &str, max_turns: usize, cfg
             transcript: transcript.clone(),
             tool_context: last_tool_result.clone().unwrap_or(json!({})),
         };
+        
+        // Debug: Show what we're sending to the LLM after tool execution
+        if env_flag("CEDAR_DEBUG_CONTEXT") {
+            println!("\n=== SENDING TO LLM (Turn {}) ===", turn + 1);
+            println!("Transcript:");
+            for item in &transcript {
+                println!("  [{}]: {}", item.role, item.content);
+            }
+            println!("\nTool Context:");
+            println!("{}", serde_json::to_string_pretty(&cycle_input.tool_context).unwrap());
+            println!("=== END CONTEXT ==\n");
+        }
+        
         let decision = call_openai_for_decision(&cycle_input, &cfg).await
             .with_context(|| "LLM call failed")?;
 
@@ -111,8 +124,21 @@ pub async fn agent_loop(run_dir: &Path, user_prompt: &str, max_turns: usize, cfg
         match decision {
             CycleDecision::RunJulia { args } => {
                 if let Some(msg) = &args.user_message { println!("{}", msg); }
-                let out = run_julia_cell(run_dir, &args.code)
-                    .with_context(|| "Julia execution failed")?;
+                // Handle Julia execution, capturing errors to pass back to LLM
+                let out = match run_julia_cell(run_dir, &args.code) {
+                    Ok(result) => result,
+                    Err(e) => {
+                        // Create a failed ToolOutcome with the error message
+                        ToolOutcome {
+                            ok: false,
+                            message: format!("Julia execution failed: {}", e),
+                            preview_json: None,
+                            table: None,
+                            stdout_tail: None,
+                            stderr_tail: Some(format!("Error: {}", e)),
+                        }
+                    }
+                };
                 // Persist preview if any
                 persist_tool_outcome(run_dir, "run_julia", &out)?;
                 last_tool_result = Some(tool_outcome_to_json(&out));
@@ -121,8 +147,21 @@ pub async fn agent_loop(run_dir: &Path, user_prompt: &str, max_turns: usize, cfg
             }
             CycleDecision::Shell { args } => {
                 if let Some(msg) = &args.user_message { println!("{}", msg); }
-                let out = run_shell(run_dir, &args.cmd, args.cwd.as_deref(), args.timeout_secs)
-                    .with_context(|| "Shell execution failed")?;
+                // Handle shell execution, capturing errors to pass back to LLM
+                let out = match run_shell(run_dir, &args.cmd, args.cwd.as_deref(), args.timeout_secs) {
+                    Ok(result) => result,
+                    Err(e) => {
+                        // Create a failed ToolOutcome with the error message
+                        ToolOutcome {
+                            ok: false,
+                            message: format!("Shell command failed: {}", e),
+                            preview_json: None,
+                            table: None,
+                            stdout_tail: None,
+                            stderr_tail: Some(format!("Error: {}", e)),
+                        }
+                    }
+                };
                 persist_tool_outcome(run_dir, "shell", &out)?;
                 last_tool_result = Some(tool_outcome_to_json(&out));
                 transcript.push(TranscriptItem{ role: "tool".into(), content: format!("shell -> {}", out.message) });
@@ -189,10 +228,24 @@ fn write_card(run_dir: &Path, title: &str, summary: &str, details: serde_json::V
 }
 
 pub async fn call_openai_for_decision(input: &CycleInput, cfg: &AgentConfig) -> Result<CycleDecision> {
-    // Use the Responses API with structured outputs. We send a compact transcript.
+    // IMPORTANT: As of August 1, 2025, OpenAI has released GPT-5 with the new /v1/responses API
+    // This replaces the legacy /v1/chat/completions endpoint used by GPT-4 and earlier models.
+    // 
+    // Critical differences that previously broke our implementation:
+    // 1. DO NOT use 'max_output_tokens' - this parameter causes GPT-5 to return empty content
+    // 2. DO NOT use 'temperature' - not supported by GPT-5 responses API
+    // 3. DO NOT use 'messages' array format - use single 'input' string instead
+    // 4. DO NOT use 'response_format' - use 'text.format.type' for JSON mode
+    // 5. DO NOT use 'input_items' - the correct parameter is 'input' (single string)
+    //
+    // The responses API is now the standard for all new OpenAI models starting with GPT-5.
+    
     // Determine base URL: prefer relay if configured
     let base = if let Some(relay) = &cfg.relay_url { relay.clone() } else { cfg.openai_base.clone().unwrap_or_else(|| "https://api.openai.com".into()) };
+    
+    // Always use the responses endpoint - GPT-5 is now the standard (August 2025)
     let url = format!("{}/v1/responses", base.trim_end_matches('/'));
+    
     let client = reqwest::Client::new();
 
     // Build a compact prompt
@@ -206,21 +259,26 @@ pub async fn call_openai_for_decision(input: &CycleInput, cfg: &AgentConfig) -> 
     prompt.push_str(&input.tool_context.to_string());
     prompt.push_str("\n--- End ---\n");
 
-    // NOTE: OpenAI Responses API request shape
-    // - We use text.format.type = "json_object" so the model returns a single JSON object.
-    // - For required environment and configuration details (direct calls vs. server-provided key),
-    //   see README.md sections "OpenAI configuration and key flow" and "Quick start".
-    //   The CLI fetch/caches OPENAI_API_KEY if CEDAR_KEY_URL + APP_SHARED_TOKEN are set; otherwise it
-    //   expects OPENAI_API_KEY to be present in the environment.
+    // GPT-5 Responses API (fully supported as of August 1, 2025)
+    // Model: gpt-5-2025-08-07 is the current production version
+    let system_msg = "Return only valid JSON for the given schema. No prose.";
+    let full_input = format!("{}\n\n{}", system_msg, prompt);
+    
+    // GPT-5 /v1/responses request format
+    // CRITICAL: These are the ONLY parameters that work correctly:
     let body = serde_json::json!({
-        "model": cfg.openai_model,
-        "input": [
-            {"role": "system", "content": "Return only valid JSON for the given schema. No prose."},
-            {"role": "user", "content": prompt}
-        ],
-        "text": {
-            "format": { "type": "json_object" }
+        "model": cfg.openai_model,  // Use gpt-5-2025-08-07 or later
+        "input": full_input,         // Single string input (NOT 'input_items' array)
+        "text": {                    // Text generation settings
+            "format": {              // JSON mode configuration
+                "type": "json_object"
+            }
         }
+        // DO NOT ADD: max_output_tokens (breaks output)
+        // DO NOT ADD: temperature (not supported)
+        // DO NOT ADD: messages array (use 'input' string)
+        // DO NOT ADD: response_format (use 'text.format')
+        // Optional: reasoning.effort can be added if needed
     });
 
     let mut req = client.post(&url)
@@ -247,29 +305,48 @@ pub async fn call_openai_for_decision(input: &CycleInput, cfg: &AgentConfig) -> 
     }
     let v: serde_json::Value = resp.json().await?;
 
-    // The Responses API returns an 'output' array (items with type 'message'|'tool_call' etc.).
-    // We concatenate any JSON text content segments.
+    // GPT-5 Responses API output format (as of August 1, 2025)
+    // The response structure contains an 'output' array with items of different types.
+    // We specifically look for 'message' type items which contain the actual response content.
+    // 
+    // Response structure:
+    // {
+    //   "output": [
+    //     { "type": "reasoning", ... },  // Optional reasoning trace
+    //     { "type": "message", "content": [ { "type": "text", "text": "..." } ] }
+    //   ]
+    // }
+    //
+    // NOTE: The old 'choices' array from GPT-4's chat/completions API is no longer used.
+    // GPT-5 exclusively uses the 'output' array format.
+    
     let mut buf = String::new();
-    if let Some(items) = v.get("output").and_then(|x| x.as_array()) {
-        for item in items {
+    
+    // Parse GPT-5 responses API output format
+    // The API can return content in two formats:
+    // 1. With type="text" and "text" field
+    // 2. With type="output_text" and "text" field (current format as of Aug 2025)
+    if let Some(output) = v.get("output").and_then(|x| x.as_array()) {
+        for item in output {
             if let Some("message") = item.get("type").and_then(|x| x.as_str()) {
-                if let Some(content) = item.get("content").and_then(|x| x.as_array()) {
-                    for block in content {
-                        if block.get("type").and_then(|x| x.as_str()) == Some("output_text") {
-                            if let Some(text) = block.get("text").and_then(|x| x.as_str()) {
+                if let Some(content_arr) = item.get("content").and_then(|x| x.as_array()) {
+                    for content_item in content_arr {
+                        let item_type = content_item.get("type").and_then(|x| x.as_str());
+                        // Handle both "text" and "output_text" types
+                        if matches!(item_type, Some("text") | Some("output_text")) {
+                            if let Some(text) = content_item.get("text").and_then(|x| x.as_str()) {
                                 buf.push_str(text);
                             }
                         }
                     }
                 }
-            } else if let Some("output_text") = item.get("type").and_then(|x| x.as_str()) {
-                if let Some(text) = item.get("text").and_then(|x| x.as_str()) {
-                    buf.push_str(text);
-                }
             }
         }
-    } else if let Some(text) = v.pointer("/output_text") .and_then(|x| x.as_str()) {
-        buf.push_str(text);
+    }
+    
+    // No fallback to old format - GPT-5 is the standard now
+    if buf.is_empty() {
+        anyhow::bail!("GPT-5 returned empty content. Response: {}", serde_json::to_string_pretty(&v)?);
     }
 
     // Parse JSON

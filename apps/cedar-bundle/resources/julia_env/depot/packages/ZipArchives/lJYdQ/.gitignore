@@ -1,0 +1,15 @@
+#Mac OS X
+*.DS_Store
+
+#VS Code
+/.vscode/
+
+/test/Manifest.toml
+/benchmark/Manifest.toml
+*.json
+*.json.tmp
+/Manifest.toml
+fixture.tar.gz
+fixture
+.CondaPkg
+*.cov

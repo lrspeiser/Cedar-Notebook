@@ -200,7 +200,8 @@ async fn handle_submit_query(body: SubmitQueryBody) -> anyhow::Result<SubmitQuer
     // Configure agent
     let config = AgentConfig {
         openai_api_key: api_key,
-        openai_model: std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-5".to_string()),
+        // Default to gpt-4o-mini which is stable. Can override with OPENAI_MODEL=gpt-5 when ready
+        openai_model: std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o-mini".to_string()),
         openai_base: std::env::var("OPENAI_BASE").ok(),
         relay_url: std::env::var("CEDAR_KEY_URL").ok(),
         app_shared_token: std::env::var("APP_SHARED_TOKEN").ok(),
@@ -414,6 +415,7 @@ async fn upload_file(mut multipart: Multipart) -> Result<Json<serde_json::Value>
         
         let config = AgentConfig {
             openai_api_key: api_key,
+            // gpt-5 is the latest model - see README.md for current model documentation
             openai_model: std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-5".to_string()),
             openai_base: std::env::var("OPENAI_BASE").ok(),
             relay_url: std::env::var("CEDAR_KEY_URL").ok(),

@@ -154,7 +154,8 @@ async fn handle_submit_query(body: SubmitQueryBody) -> anyhow::Result<SubmitQuer
     // Configure agent
     let config = AgentConfig {
         openai_api_key: api_key,
-        openai_model: std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o-2024-08-06".to_string()),
+        // gpt-5 is the latest model - see README.md for current model documentation
+        openai_model: std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-5".to_string()),
         openai_base: std::env::var("OPENAI_BASE").ok(),
         relay_url: std::env::var("CEDAR_KEY_URL").ok(),
         app_shared_token: std::env::var("APP_SHARED_TOKEN").ok(),

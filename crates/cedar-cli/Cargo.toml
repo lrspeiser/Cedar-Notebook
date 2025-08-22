@@ -23,3 +23,4 @@ indicatif = { workspace = true }
 tempfile = "3"
 axum = "0.7"
 keyring = "2"
+chrono = { workspace = true }

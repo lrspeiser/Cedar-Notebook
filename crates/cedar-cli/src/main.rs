@@ -8,6 +8,8 @@ use notebook_core::data::registry::DatasetRegistry;
 use std::{path::{PathBuf, Path}, fs, io::Read};
 use tracing_subscriber::{EnvFilter, fmt};
 
+mod data_ingest;
+
 #[derive(Parser, Debug)]
 #[command(version, about="CedarCLI — End‑to‑End LLM Agent Loop for Data & Compute")]
 struct Cli {
@@ -198,6 +200,7 @@ async fn cmd_agent(runs_root: &Path, user_prompt: &str) -> Result<()> {
 
     let cfg = AgentConfig {
         openai_api_key,
+        // gpt-5 is the latest model - see README.md for current model documentation
         openai_model: std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-5".into()),
         openai_base: std::env::var("OPENAI_BASE").ok(),
         relay_url,
@@ -208,27 +211,13 @@ async fn cmd_agent(runs_root: &Path, user_prompt: &str) -> Result<()> {
 }
 
 async fn cmd_ingest(runs_root: &Path, path: PathBuf) -> Result<()> {
-    let run = create_new_run(Some(runs_root))?;
-    let file = path.canonicalize()?;
-    let fname = file.file_name().unwrap().to_string_lossy().to_string();
-    let code = format!(r#"
-using CSV, DataFrames, Parquet
-df = CSV.read(raw"{file}", DataFrame; missingstring="")
-first(df, 5) |> println
-Parquet.write("result.parquet", df)
-println("```PREVIEW_JSON")
-println("{{\"summary\":\"Ingested file: {fname}\",\"columns\":", names(df), ",\"rows\":5}}")
-println("```")
-"#, file=file.display(), fname=fname);
-    let out = notebook_core::executors::julia::run_julia_cell(&run.dir, &code)?;
-    println!("{}", out.message);
-    if let Some(table) = out.table {
-        // Register under data/parquet/
-        let reg = DatasetRegistry::default_under_repo(&std::env::current_dir()?) ;
-        let dst = reg.register_parquet(&fname.replace('.',"_"), Path::new(&table.path.unwrap()))?;
-        println!("Registered dataset -> {}", dst.display());
-    }
-    Ok(())
+    // Ensure we have an API key
+    maybe_fetch_and_cache_openai_key().await?;
+    let openai_api_key = std::env::var("OPENAI_API_KEY")
+        .context("OPENAI_API_KEY required for data ingestion")?;
+    
+    // Use the enhanced agent-based ingestion
+    data_ingest::ingest_with_agent(runs_root, path, openai_api_key).await
 }
 
 async fn cmd_pipeline_test(_runs_root: &Path, path: PathBuf, dry_run: bool) -> Result<()> {

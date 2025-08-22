@@ -1,23 +1,38 @@
 [["/Users/leonardspeiser/Projects/cedarcli/apps/cedar-bundle/resources/julia_env/depot/packages/DecFP_jll/L6jDV/Artifacts.toml"]]
-time = 2025-08-21T09:38:28.266Z
+time = 2025-08-22T08:33:27.587Z
 
 [["/Users/leonardspeiser/Projects/cedarcli/apps/cedar-bundle/resources/julia_env/depot/packages/DuckDB_jll/l540s/Artifacts.toml"]]
-time = 2025-08-21T09:38:26.674Z
+time = 2025-08-22T08:33:27.100Z
+
+[["/Users/leonardspeiser/Projects/cedarcli/apps/cedar-bundle/resources/julia_env/depot/packages/Libiconv_jll/sE4g7/Artifacts.toml"]]
+time = 2025-08-22T08:33:27.584Z
 
 [["/Users/leonardspeiser/Projects/cedarcli/apps/cedar-bundle/resources/julia_env/depot/packages/Lz4_jll/l1tka/Artifacts.toml"]]
-time = 2025-08-21T09:38:28.558Z
+time = 2025-08-22T08:33:27.588Z
 
 [["/Users/leonardspeiser/Projects/cedarcli/apps/cedar-bundle/resources/julia_env/depot/packages/OpenSSL_jll/jIafg/Artifacts.toml"]]
-time = 2025-08-21T09:38:27.073Z
+time = 2025-08-22T08:33:27.101Z
 
 [["/Users/leonardspeiser/Projects/cedarcli/apps/cedar-bundle/resources/julia_env/depot/packages/OpenSpecFun_jll/4QIOW/Artifacts.toml"]]
-time = 2025-08-21T09:38:29.509Z
+time = 2025-08-22T08:33:27.592Z
+
+[["/Users/leonardspeiser/Projects/cedarcli/apps/cedar-bundle/resources/julia_env/depot/packages/Parquet/YChPa/Artifacts.toml"]]
+time = 2025-08-22T08:33:27.591Z
+
+[["/Users/leonardspeiser/Projects/cedarcli/apps/cedar-bundle/resources/julia_env/depot/packages/ThriftJuliaCompiler_jll/yUf7q/Artifacts.toml"]]
+time = 2025-08-22T08:33:27.585Z
+
+[["/Users/leonardspeiser/Projects/cedarcli/apps/cedar-bundle/resources/julia_env/depot/packages/XLSX/vzApD/Artifacts.toml"]]
+time = 2025-08-22T08:33:27.799Z
+
+[["/Users/leonardspeiser/Projects/cedarcli/apps/cedar-bundle/resources/julia_env/depot/packages/XML2_jll/1WhCX/Artifacts.toml"]]
+time = 2025-08-22T08:33:27.066Z
 
 [["/Users/leonardspeiser/Projects/cedarcli/apps/cedar-bundle/resources/julia_env/depot/packages/Zstd_jll/YX1LN/Artifacts.toml"]]
-time = 2025-08-21T09:38:26.779Z
+time = 2025-08-22T08:33:27.099Z
 
 [["/Users/leonardspeiser/Projects/cedarcli/apps/cedar-bundle/resources/julia_env/depot/packages/brotli_jll/VisTS/Artifacts.toml"]]
-time = 2025-08-21T09:38:27.437Z
+time = 2025-08-22T08:33:27.103Z
 
 [["/Users/leonardspeiser/Projects/cedarcli/apps/cedar-bundle/resources/julia_env/depot/packages/snappy_jll/GeeRK/Artifacts.toml"]]
-time = 2025-08-21T09:38:29.229Z
+time = 2025-08-22T08:33:27.590Z

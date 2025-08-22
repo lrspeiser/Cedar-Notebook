@@ -67,8 +67,12 @@ pub fn run_julia_cell(run_dir: &Path, code: &str) -> anyhow::Result<ToolOutcome>
     fs::write(&script_path, code)?;
     debug!(script = %script_path.display(), "wrote Julia cell");
 
-    // Check for embedded Julia first (in app bundle)
-    let julia_cmd = if cfg!(target_os = "macos") {
+    // First check for JULIA_BIN environment variable on all platforms
+    let julia_cmd = if let Ok(julia_bin) = std::env::var("JULIA_BIN") {
+        debug!("Using Julia from JULIA_BIN: {}", julia_bin);
+        julia_bin
+    } else if cfg!(target_os = "macos") {
+        // Check for embedded Julia (in app bundle)
         // Check if we're running from an app bundle
         if let Ok(exe_path) = std::env::current_exe() {
             if exe_path.to_string_lossy().contains(".app/Contents/MacOS") {
@@ -85,26 +89,35 @@ pub fn run_julia_cell(run_dir: &Path, code: &str) -> anyhow::Result<ToolOutcome>
                 }
             } else {
                 // Development mode - check for embedded Julia in resources
+                // Try relative to current working directory first
                 let dev_julia = Path::new("apps/cedar-bundle/resources/julia-wrapper.sh");
                 if dev_julia.exists() {
-                    debug!("Using embedded Julia from development resources");
-                    dev_julia.to_string_lossy().to_string()
+                    debug!("Using embedded Julia from development resources (relative path)");
+                    dev_julia.canonicalize().unwrap_or(dev_julia.to_path_buf()).to_string_lossy().to_string()
                 } else {
-                    "julia".to_string()
+                    // Try relative to executable location
+                    let exe_dir = exe_path.parent().unwrap();
+                    let julia_from_exe = exe_dir.join("../../../apps/cedar-bundle/resources/julia-wrapper.sh");
+                    if julia_from_exe.exists() {
+                        debug!("Using embedded Julia from development resources (exe relative)");
+                        julia_from_exe.canonicalize().unwrap_or(julia_from_exe).to_string_lossy().to_string()
+                    } else {
+                        debug!("No bundled Julia found, falling back to system julia");
+                        "julia".to_string()
+                    }
                 }
             }
         } else {
             "julia".to_string()
         }
     } else {
-        // On other platforms, use system Julia or check env var
-        std::env::var("JULIA_BIN").unwrap_or_else(|_| "julia".to_string())
+        // On other platforms, use system Julia
+        "julia".to_string()
     };
 
-    // Prefer passing the file path directly to Julia.
+    // Pass the script file directly to Julia
     let mut cmd = Command::new(&julia_cmd);
-    cmd.arg("--project")
-        .arg(script_path.as_os_str())
+    cmd.arg(script_path.as_os_str())
         .current_dir(run_dir)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -118,9 +131,24 @@ pub fn run_julia_cell(run_dir: &Path, code: &str) -> anyhow::Result<ToolOutcome>
     let err = t_err.join().unwrap_or_default();
     let ok = status.success();
 
+    // Check if the error is about missing packages
+    let message = if err.contains("Package") && err.contains("not found") {
+        // Extract package name if possible
+        let package_hint = err.lines()
+            .find(|line| line.contains("Package") && line.contains("not found"))
+            .unwrap_or(&err);
+        format!("Julia package error: {}\nHint: Install the missing package using: using Pkg; Pkg.add(\"PackageName\")\n{}", package_hint, out)
+    } else if err.is_empty() {
+        out.clone()
+    } else {
+        format!("{out}\n{err}")
+    };
+    
     Ok(ToolOutcome {
         ok,
-        message: if err.is_empty() { out } else { format!("{out}\n{err}") },
+        message,
+        stderr_tail: if !err.is_empty() { Some(err) } else { None },
+        stdout_tail: if !out.is_empty() { Some(out) } else { None },
         ..Default::default()
     })
 }

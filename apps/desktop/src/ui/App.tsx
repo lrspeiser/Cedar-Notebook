@@ -1,5 +1,7 @@
 import React, { useState } from 'react'
-import { invoke } from '@tauri-apps/api/tauri'
+import { invoke } from '@tauri-apps/api/core'
+
+const SERVER = import.meta.env.VITE_SERVER_URL || 'http://localhost:8080'
 
 export default function App() {
   const [prompt, setPrompt] = useState('')
@@ -26,8 +28,7 @@ export default function App() {
     }
   }
 
-  // … render stays the same
-}
+  return (
     <div style={{ fontFamily: 'sans-serif', padding: 16 }}>
       <h1>Cedar Desktop (MVP)</h1>
       <p>Ask a question. The backend runs the agent loop and returns the final response.</p>

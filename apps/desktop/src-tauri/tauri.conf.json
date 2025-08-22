@@ -12,9 +12,9 @@
   "app": {
     "windows": [
       {
-        "title": "cedar-desktop",
-        "width": 800,
-        "height": 600,
+        "title": "Cedar Desktop - Full UI",
+        "width": 1200,
+        "height": 800,
         "resizable": true,
         "fullscreen": false
       }
@@ -32,6 +32,9 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
+    ],
+    "resources": [
+      "../.env.desktop"
     ]
   }
 }

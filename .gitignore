@@ -24,3 +24,7 @@ webui/dist
 services/relay/node_modules/
 services/relay/dist/
 services/relay/.env
+
+# Logs
+logs/
+*.log

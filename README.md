@@ -12,23 +12,47 @@ This document provides a complete architecture overview of the codebase and expl
 
 ## Repository Structure
 
-The project is a Rust workspace with several crates. A simplified tree is shown below (see `PROJECT_STRUCTURE.md`):
+The project is organized into a clean directory structure:
 
 ```
-
 .
-├── Cargo.toml
-├── crates
-│   ├── notebook\_core    # core business logic (agent loop, executors, data catalog)
-│   ├── notebook\_api     # tRPC interface exposing run\_julia, run\_shell and list\_runs
-│   ├── notebook\_server  # HTTP/WS server built on axum; wraps notebook\_core
-│   ├── notebook\_tauri   # thin Tauri desktop app
-│   ├── cedar-cli        # command-line interface built on notebook\_core
-│   └── cedar-smoke etc.
-├── docs                 # design documents
-├── data                 # example datasets (small)
-
-````
+├── Cargo.toml              # Rust workspace configuration
+├── README.md               # This file
+├── .env.example            # Environment variable template
+├── render.yaml             # Render deployment config
+│
+├── apps/                   # Frontend applications
+│   ├── desktop/            # Tauri desktop app
+│   └── web-ui/             # Web interface
+│
+├── crates/                 # Rust crates (core logic)
+│   ├── notebook_core/      # Core business logic (agent loop, executors)
+│   ├── notebook_api/       # tRPC interface
+│   ├── notebook_server/    # HTTP/WS server (axum)
+│   ├── notebook_tauri/     # Tauri desktop integration
+│   └── cedar-cli/          # Command-line interface
+│
+├── data/                   # Data files
+│   ├── parquet/            # Parquet data storage
+│   └── samples/            # Sample CSV/Excel files
+│
+├── docs/                   # Documentation
+│   ├── architecture/       # Architecture docs
+│   ├── DATA_INGESTION_README.md
+│   └── TESTING.md
+│
+├── scripts/                # Utility scripts
+│   ├── build_*.sh          # Build scripts
+│   ├── start_cedar_server.sh
+│   └── ...
+│
+├── tests/                  # Test suite
+│   ├── test_backend_unit.py
+│   ├── run_all_tests.sh
+│   └── ...
+│
+└── logs/                   # Log files (gitignored)
+```
 
 Separation of concerns – the backend lives in `notebook_core` and `notebook_server` and contains thousands of lines of code, whereas the UI layers (`notebook_tauri`, CLI and web UI) are intentionally small (often under a few hundred lines). This ensures that new interfaces can be added without touching business logic.
 

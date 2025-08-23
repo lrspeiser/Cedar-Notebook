@@ -164,14 +164,207 @@ Backend constructs prompt; model may first `find` the file, then generate Julia 
 
 ---
 
+## Recent Enhancements
+
+### Server-Sent Events (SSE) Streaming
+
+The system now supports real-time processing updates via SSE:
+
+* Frontend connects to `/runs/{run_id}/events` when processing starts
+* Backend broadcasts status updates, tool executions, outputs
+* No UI changes required - updates appear inline in result cards
+* Auto-closes connections after 5 minutes to prevent hanging
+
+### Native File Dialog (Tauri Desktop)
+
+* Desktop app uses native OS file dialogs via Tauri
+* Direct file path access - no upload needed
+* Backend receives full path and processes locally
+* Web fallback uses preview + file search strategy
+
+### Improved Error Handling
+
+* Empty datasets on first run are normal (logged, not errors)
+* File path prompts only suggest shell search if path incomplete
+* Graceful degradation when endpoints unavailable
+
+---
+
+## Testing Infrastructure
+
+### Test Organization
+
+All test scripts are organized in the `tests/` directory:
+
+```bash
+tests/
+├── test_backend_unit.py      # Comprehensive unit tests
+├── test_frontend_backend.py  # Integration tests
+├── test_e2e_with_retry.py   # End-to-end tests with LLM
+├── run_all_tests.sh         # Master test runner
+└── ... (20+ specialized test scripts)
+```
+
+### Running Tests
+
+#### Quick Start
+```bash
+# Run all tests
+cd tests
+./run_all_tests.sh
+
+# Run specific test suites
+python3 test_backend_unit.py      # Backend unit tests
+python3 test_frontend_backend.py  # Integration tests  
+python3 test_e2e_with_retry.py    # E2E with real LLM
+```
+
+#### Backend Unit Tests
+
+Comprehensive test coverage for all endpoints:
+
+```python
+# test_backend_unit.py examples:
+
+class TestCedarBackend(unittest.TestCase):
+    def test_01_health_check(self):
+        """Test health endpoint"""
+        response = requests.get(f"{self.base_url}/health")
+        self.assertEqual(response.status_code, 200)
+        
+    def test_03_submit_query_text(self):
+        """Test submitting a text query"""
+        payload = {
+            "prompt": "What is 2 + 2?",
+            "api_key": self.api_key
+        }
+        response = requests.post(
+            f"{self.base_url}/commands/submit_query",
+            json=payload
+        )
+        self.assertEqual(response.status_code, 200)
+        
+    def test_07_sse_endpoint(self):
+        """Test SSE endpoint availability"""
+        sse_url = f"{self.base_url}/runs/{run_id}/events"
+        response = requests.get(sse_url, stream=True)
+        self.assertIn("text/event-stream", 
+                     response.headers.get("content-type"))
+```
+
+### Test Coverage
+
+✅ **Unit Tests** (13 tests)
+- Health check & CORS headers
+- Text query submission
+- File path submission (Tauri mode)
+- File preview submission (web mode)
+- SSE endpoint availability
+- Julia/Shell execution
+- Error handling scenarios
+- Conversation history
+
+✅ **Integration Tests**
+- End-to-end CSV processing
+- Frontend-backend communication
+- File upload workflows
+- Dataset management
+
+✅ **E2E Tests** (with real LLM)
+- Complete data analysis workflows
+- Multi-turn conversations
+- Error recovery
+- Complex Julia code generation
+
+### Test Configuration
+
+```bash
+# Environment variables
+export CEDAR_SERVER_URL="http://localhost:8080"  # Server URL
+export OPENAI_API_KEY="sk-..."                   # API key for E2E tests
+
+# Start server before testing
+./start_cedar_server.sh
+
+# Run tests
+cd tests
+./run_all_tests.sh
+```
+
+### Sample Test Output
+
+```
+============================================
+🌲 CEDAR COMPREHENSIVE TEST SUITE
+============================================
+
+✓ Server is running
+
+1. Backend Unit Tests
+✅ Testing health check...
+  ✓ Health check passed
+✅ Testing CORS headers...
+  ✓ CORS headers present
+✅ Testing text query submission...
+  ✓ Query submitted, run_id: abc123
+✅ Testing SSE endpoint...
+  ✓ SSE endpoint available
+...
+✅ ALL TESTS PASSED!
+```
+
+---
+
+## Building and Deployment
+
+### Desktop App (Tauri)
+
+```bash
+# Build the desktop app
+cd apps/desktop
+npm run tauri build
+
+# Output: target/release/bundle/dmg/cedar-desktop_0.1.0_aarch64.dmg
+```
+
+### Backend Server
+
+```bash
+# Build optimized binary
+cargo build --release --bin notebook_server
+
+# Run with API key
+OPENAI_API_KEY="sk-..." ./target/release/notebook_server
+```
+
+### Docker Deployment
+
+```dockerfile
+# Dockerfile example
+FROM rust:1.70 as builder
+WORKDIR /app
+COPY . .
+RUN cargo build --release
+
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y julia
+COPY --from=builder /app/target/release/notebook_server /usr/local/bin/
+CMD ["notebook_server"]
+```
+
+---
+
 ## Conclusion
 
 Cedar Notebook provides a secure and robust framework for **LLM-driven data analysis**:
 
-* API keys are centrally managed.
-* Backend controls all business logic.
-* Files are processed locally, only previews/metadata go to the LLM.
-* Parquet + DuckDB ensure reproducibility and context for model reasoning.
+* **API keys are centrally managed** - Never stored in clients
+* **Backend controls all business logic** - UI is purely presentational
+* **Files are processed locally** - Only previews/metadata go to the LLM
+* **Parquet + DuckDB** ensure reproducibility and context
+* **Real-time updates via SSE** - See processing as it happens
+* **Comprehensive test coverage** - Unit, integration, and E2E tests
+* **Native desktop experience** - Via Tauri with native file dialogs
 
-Examples like computing *2+2* or ingesting a CSV show how the agent orchestrates Julia and shell to produce reliable results.
+The system gracefully handles everything from simple arithmetic (*2+2*) to complex data ingestion workflows, with full error recovery and retry capabilities.
 

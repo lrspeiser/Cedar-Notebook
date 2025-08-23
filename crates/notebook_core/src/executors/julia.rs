@@ -62,10 +62,20 @@ fn spawn_log_threads(child: &mut Child) -> (thread::JoinHandle<String>, thread::
 
 #[tracing::instrument(skip_all, fields(run_dir = %run_dir.display()))]
 pub fn run_julia_cell(run_dir: &Path, code: &str) -> anyhow::Result<ToolOutcome> {
+    // Log the code being executed
+    eprintln!("[JULIA] Executing code in directory: {}", run_dir.display());
+    eprintln!("[JULIA] Code length: {} bytes", code.len());
+    if code.len() < 500 {
+        eprintln!("[JULIA] Code: {}", code);
+    } else {
+        eprintln!("[JULIA] Code (first 500 chars): {}...", &code[..500]);
+    }
+    
     // Write a temporary script; if you already do this differently, keep your path.
     let script_path = run_dir.join("cell.jl");
     fs::write(&script_path, code)?;
     debug!(script = %script_path.display(), "wrote Julia cell");
+    eprintln!("[JULIA] Script written to: {}", script_path.display());
 
     // First check for JULIA_BIN environment variable on all platforms
     let julia_cmd = if let Ok(julia_bin) = std::env::var("JULIA_BIN") {
@@ -122,14 +132,37 @@ pub fn run_julia_cell(run_dir: &Path, code: &str) -> anyhow::Result<ToolOutcome>
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
+    eprintln!("[JULIA] Command: {} {}", julia_cmd, script_path.display());
+    eprintln!("[JULIA] Working directory: {}", run_dir.display());
     info!("spawning julia");
-    let mut child = cmd.spawn().map_err(|e| anyhow::anyhow!("spawn failed: {e}"))?;
+    let mut child = cmd.spawn().map_err(|e| {
+        eprintln!("[JULIA ERROR] Failed to spawn Julia process: {}", e);
+        anyhow::anyhow!("spawn failed: {e}")
+    })?;
     let (t_out, t_err) = spawn_log_threads(&mut child);
 
     let status = child.wait().map_err(|e| anyhow::anyhow!("wait failed: {e}"))?;
     let out = t_out.join().unwrap_or_default();
     let err = t_err.join().unwrap_or_default();
     let ok = status.success();
+    
+    eprintln!("[JULIA] Execution completed with status: {} (ok={})", status, ok);
+    if !out.is_empty() {
+        let out_preview = if out.len() < 500 { 
+            out.clone() 
+        } else { 
+            format!("{}...", &out[..500])
+        };
+        eprintln!("[JULIA] Stdout ({} bytes): {}", out.len(), out_preview);
+    }
+    if !err.is_empty() {
+        let err_preview = if err.len() < 500 { 
+            err.clone() 
+        } else { 
+            format!("{}...", &err[..500])
+        };
+        eprintln!("[JULIA] Stderr ({} bytes): {}", err.len(), err_preview);
+    }
 
     // Check if the error is about missing packages
     let message = if err.contains("Package") && err.contains("not found") {

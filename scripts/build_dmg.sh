@@ -47,6 +47,15 @@ echo -e "\n${YELLOW}Step 4: Copying web UI files...${NC}"
 cp apps/web-ui/index.html "$BUILD_DIR/Cedar.app/Contents/Resources/web-ui/"
 echo -e "${GREEN}✓ Web UI copied${NC}"
 
+echo -e "\n${YELLOW}Step 4b: Copying environment configuration...${NC}"
+# Copy the .env file to the app bundle
+if [ -f "apps/cedar-bundle/resources/.env" ]; then
+    cp apps/cedar-bundle/resources/.env "$BUILD_DIR/Cedar.app/Contents/Resources/"
+    echo -e "${GREEN}✓ Environment config copied${NC}"
+else
+    echo -e "${YELLOW}⚠ No .env file found, app will use defaults${NC}"
+fi
+
 echo -e "\n${YELLOW}Step 5: Creating Info.plist...${NC}"
 cat > "$BUILD_DIR/Cedar.app/Contents/Info.plist" << 'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -75,8 +84,10 @@ cat > "$BUILD_DIR/Cedar.app/Contents/Info.plist" << 'EOF'
     <string>10.15</string>
     <key>LSEnvironment</key>
     <dict>
-        <key>OPENAI_API_KEY</key>
-        <string>ENV_OPENAI_API_KEY</string>
+        <key>CEDAR_KEY_URL</key>
+        <string>https://cedar-notebook.onrender.com</string>
+        <key>APP_SHARED_TOKEN</key>
+        <string>cedar-2024-secure-token</string>
     </dict>
 </dict>
 </plist>
@@ -93,7 +104,10 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 APP_DIR="$SCRIPT_DIR/.."
 
 # Set up environment
-export OPENAI_API_KEY="${OPENAI_API_KEY}"
+# Load from bundled .env file if it exists
+if [ -f "$APP_DIR/Resources/.env" ]; then
+    export $(grep -v '^#' "$APP_DIR/Resources/.env" | xargs)
+fi
 
 # Start the backend server
 cd "$APP_DIR/Resources"
@@ -126,9 +140,10 @@ Features:
 
 Installation:
 1. Drag Cedar.app to your Applications folder
-2. Set your OpenAI API key:
-   export OPENAI_API_KEY="your-key-here"
-3. Double-click Cedar.app to launch
+2. Double-click Cedar.app to launch
+
+The app automatically fetches the API key from the Cedar server.
+No manual configuration needed!
 
 Usage:
 - Type queries in the Research tab

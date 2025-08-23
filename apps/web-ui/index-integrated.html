@@ -728,20 +728,6 @@
                     prompt: query
                 };
                 
-                // Try to get API key from server config endpoint first
-                try {
-                    const keyResponse = await fetch(`${API_URL}/config/openai_key`);
-                    if (keyResponse.ok) {
-                        const keyData = await keyResponse.json();
-                        if (keyData.openai_api_key) {
-                            requestBody.api_key = keyData.openai_api_key;
-                            debug('Using API key from server config');
-                        }
-                    }
-                } catch (e) {
-                    debug('Could not fetch API key from server, will rely on server environment', true);
-                }
-                
                 if (currentFile) {
                     requestBody.file_info = {
                         path: currentFile.path,
@@ -755,58 +741,19 @@
                     body: JSON.stringify(requestBody)
                 });
                 
-                debug('Response status: ' + response.status);
-                
                 if (!response.ok) {
-                    let errorMessage = `Server returned status ${response.status}`;
-                    try {
-                        const errorText = await response.text();
-                        debug('Server error response text: ' + errorText, true);
-                        
-                        // Try to parse as JSON first to get structured error
-                        try {
-                            const errorJson = JSON.parse(errorText);
-                            if (errorJson.error) {
-                                errorMessage = errorJson.error;
-                            } else if (errorJson.message) {
-                                errorMessage = errorJson.message;
-                            } else {
-                                errorMessage = errorText;
-                            }
-                        } catch (e) {
-                            // Not JSON, use raw text
-                            errorMessage = errorText || `HTTP ${response.status} error`;
-                        }
-                    } catch (e) {
-                        debug('Could not read error response: ' + e, true);
-                    }
-                    
-                    throw new Error(errorMessage);
+                    throw new Error(`Server error: ${response.status}`);
                 }
                 
                 const result = await response.json();
-                debug('Query succeeded, result keys: ' + Object.keys(result).join(', '));
                 updateResultCard(result);
                 
                 input.value = '';
                 currentFile = null;
                 
             } catch (error) {
-                debug('Query error details:', true);
-                debug('  Error name: ' + error.name, true);
-                debug('  Error message: ' + error.message, true);
-                debug('  Error stack: ' + (error.stack || 'No stack trace'), true);
-                debug('  Request body was: ' + JSON.stringify(requestBody), true);
-                
-                // Show more helpful error message
-                let errorDisplay = error.message;
-                if (error.message.includes('No API key')) {
-                    errorDisplay = 'No API key provided. Please set OPENAI_API_KEY environment variable before starting the app.';
-                } else if (error.message.includes('fetch')) {
-                    errorDisplay = 'Could not connect to Cedar backend. Make sure the app is running properly.';
-                }
-                
-                showError(errorDisplay);
+                debug('Query error: ' + JSON.stringify(error), true);
+                showError(`Failed to process query: ${error.message}`);
             } finally {
                 submitBtn.disabled = false;
                 submitBtn.textContent = 'Submit Query';

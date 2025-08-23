@@ -22,6 +22,10 @@ reqwest = { version = "0.12", features = ["json"] }
 tauri = { version = "2.0.0-beta.19", features = ["custom-protocol"] }
 uuid = { workspace = true }
 chrono = { workspace = true }
+walkdir = "2.4"
+dirs = "5.0"
+rusqlite = { version = "0.31", features = ["bundled"] }
+once_cell = "1.19"
 [build-dependencies]
 tauri-build = { version = "2.0.0-beta.19", features = [] }
 

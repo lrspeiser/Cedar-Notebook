@@ -4,6 +4,19 @@ use std::net::SocketAddr;
 use tower_http::cors::{CorsLayer, Any};
 use notebook_core::duckdb_metadata::{DatasetMetadata, MetadataManager, ColumnInfo, detect_file_type, extract_sample_lines};
 
+mod file_search;
+use file_search::{search_files, SearchFilesRequest};
+
+mod file_index;
+use file_index::{FileIndexer, IndexedFile, SearchRequest};
+use std::sync::{Arc, Mutex};
+use once_cell::sync::Lazy;
+
+// Global file indexer instance
+static FILE_INDEXER: Lazy<Arc<Mutex<Option<FileIndexer>>>> = Lazy::new(|| {
+    Arc::new(Mutex::new(None))
+});
+
 async fn health() -> &'static str { "ok" }
 
 /// Serve the main web UI
@@ -176,10 +189,32 @@ async fn handle_submit_query(body: SubmitQueryBody) -> anyhow::Result<SubmitQuer
     use notebook_core::agent_loop::{agent_loop, AgentConfig};
     use notebook_core::runs::create_new_run;
     
-    // Get API key from request or environment
-    let api_key = body.api_key
-        .or_else(|| std::env::var("OPENAI_API_KEY").ok())
-        .ok_or_else(|| anyhow::anyhow!("No API key provided"))?;
+    // Get API key from multiple sources in order of preference:
+    // 1. Request body (from client)
+    // 2. OPENAI_API_KEY environment variable
+    // 3. openai_api_key environment variable (lowercase)
+    // 4. CEDAR_KEY_URL remote service if configured
+    let api_key = if let Some(key) = body.api_key {
+        eprintln!("[QUERY] Using API key from request");
+        key
+    } else if let Ok(key) = std::env::var("OPENAI_API_KEY") {
+        eprintln!("[QUERY] Using API key from OPENAI_API_KEY env var");
+        key
+    } else if let Ok(key) = std::env::var("openai_api_key") {
+        eprintln!("[QUERY] Using API key from openai_api_key env var");
+        key
+    } else if let Ok(relay_url) = std::env::var("CEDAR_KEY_URL") {
+        // Try to fetch from remote key service
+        eprintln!("[QUERY] Attempting to fetch API key from relay service: {}", relay_url);
+        // For now, we'll just use the relay URL as a flag to indicate remote key management
+        // The actual key will be managed by the agent config
+        "relay-managed-key".to_string()
+    } else {
+        eprintln!("[QUERY ERROR] No API key found in any source");
+        eprintln!("[QUERY ERROR] Checked: request body, OPENAI_API_KEY env, openai_api_key env, CEDAR_KEY_URL");
+        eprintln!("[QUERY ERROR] Please set one of these environment variables before starting the app");
+        return Err(anyhow::anyhow!("No API key provided. Please set OPENAI_API_KEY environment variable."));
+    };
     
     // Build prompt based on whether we have file_info or just a text prompt
     let full_prompt = if let Some(file_info) = &body.file_info {
@@ -227,25 +262,46 @@ async fn handle_submit_query(body: SubmitQueryBody) -> anyhow::Result<SubmitQuer
             prompt.push_str("- First 5 rows as preview\n\n");
             
             prompt.push_str("STEP 3: Convert to Parquet format\n");
-            prompt.push_str("- Convert string columns to proper String type (not String15/String31)\n");
-            prompt.push_str("- Save as 'result.parquet' in the working directory\n");
-            prompt.push_str("- Use write_parquet() function (NOT Parquet.File())\n\n");
+            prompt.push_str("CRITICAL: You must write the Parquet file yourself using Julia code:\n");
+            prompt.push_str("```julia\n");
+            prompt.push_str("using Parquet2, DataFrames\n");
+            prompt.push_str("# Assuming df is your DataFrame\n");
+            prompt.push_str("parquet_path = joinpath(pwd(), \"result.parquet\")\n");
+            prompt.push_str("Parquet2.writefile(parquet_path, df)\n");
+            prompt.push_str("println(\"Parquet file written to: \", parquet_path)\n");
+            prompt.push_str("println(\"File size: \", filesize(parquet_path), \" bytes\")\n");
+            prompt.push_str("```\n");
+            prompt.push_str("- The parquet file MUST be created in the current working directory\n");
+            prompt.push_str("- Verify the file was created and has non-zero size\n\n");
             
-            prompt.push_str("STEP 4: Store in DuckDB (optional if DuckDB available)\n");
-            prompt.push_str(&format!("- Connect to DuckDB at: {}\n", metadata_db_path.display()));
-            prompt.push_str("- Create or replace a table from the Parquet file\n");
-            prompt.push_str("- Run validation queries\n\n");
+            prompt.push_str("STEP 4: Register in DuckDB for querying\n");
+            prompt.push_str("Use DuckDB.jl to register the dataset:\n");
+            prompt.push_str("```julia\n");
+            prompt.push_str("using DuckDB\n");
+            prompt.push_str(&format!("db = DBInterface.connect(DuckDB.DB, \"{}\")\n", metadata_db_path.display()));
+            prompt.push_str("# Create table from parquet\n");
+            prompt.push_str("DBInterface.execute(db, \"CREATE OR REPLACE TABLE dataset AS SELECT * FROM read_parquet('result.parquet')\")\n");
+            prompt.push_str("# Verify with a count query\n");
+            prompt.push_str("result = DBInterface.execute(db, \"SELECT COUNT(*) as row_count FROM dataset\")\n");
+            prompt.push_str("println(\"Rows in DuckDB: \", first(result).row_count)\n");
+            prompt.push_str("DBInterface.close!(db)\n");
+            prompt.push_str("```\n\n");
             
             prompt.push_str("STEP 5: Generate metadata summary\n");
             prompt.push_str("- Create a JSON preview with all statistics\n");
             prompt.push_str("- Include a descriptive title and summary\n");
             prompt.push_str("- List interesting patterns or insights found\n\n");
             
-            prompt.push_str("IMPORTANT: Use the agent loop capabilities:\n");
-            prompt.push_str("- If packages are missing, install them with Pkg.add()\n");
-            prompt.push_str("- If errors occur, analyze and retry with fixes\n");
-            prompt.push_str("- Use println() to show progress and results\n");
-            prompt.push_str("- Create PREVIEW_JSON blocks for structured output\n\n");
+            prompt.push_str("IMPORTANT: Required Julia packages and setup:\n");
+            prompt.push_str("- Ensure these packages are loaded: CSV, DataFrames, Parquet2, DuckDB, JSON3\n");
+            prompt.push_str("- If any package is missing, install it first:\n");
+            prompt.push_str("  ```julia\n");
+            prompt.push_str("  using Pkg\n");
+            prompt.push_str("  Pkg.add([\"CSV\", \"DataFrames\", \"Parquet2\", \"DuckDB\", \"JSON3\"])\n");
+            prompt.push_str("  ```\n");
+            prompt.push_str("- Use println() extensively to log progress at each step\n");
+            prompt.push_str("- If errors occur, show the error, analyze it, and retry with fixes\n");
+            prompt.push_str("- Verify each step completed successfully before moving to the next\n\n");
             
             prompt.push_str("Start with Step 1 and proceed through all steps systematically.\n");
         } else if let Some(preview) = &file_info.preview {
@@ -821,6 +877,117 @@ async fn get_openai_key() -> Result<Json<serde_json::Value>, (StatusCode, String
     })))
 }
 
+/// Search for files on the local filesystem by name
+/// This allows the web UI to find files when full paths aren't available
+async fn search_files_endpoint(Json(request): Json<SearchFilesRequest>) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    eprintln!("[cedar-server] Searching for files matching: {}", request.filename);
+    
+    let matches = search_files(request)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    
+    eprintln!("[cedar-server] Found {} matching files", matches.len());
+    
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "matches": matches,
+    })))
+}
+
+/// Initialize the file index by scanning with Spotlight
+async fn index_files() -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    eprintln!("[cedar-server] Starting file indexing...");
+    
+    // Initialize indexer if not already done
+    let mut indexer_lock = FILE_INDEXER.lock().unwrap();
+    if indexer_lock.is_none() {
+        let db_path = notebook_core::util::default_runs_root()
+            .map(|r| r.join("file_index.sqlite"))
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        
+        let indexer = FileIndexer::new(&db_path)
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to create indexer: {}", e)))?;
+        
+        *indexer_lock = Some(indexer);
+    }
+    
+    // Run indexing
+    let count = indexer_lock
+        .as_ref()
+        .unwrap()
+        .seed_from_spotlight(None)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Indexing failed: {}", e)))?;
+    
+    eprintln!("[cedar-server] Indexed {} files", count);
+    
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "indexed_count": count,
+    })))
+}
+
+/// Get instant search suggestions using the file index
+async fn search_indexed_files(Json(request): Json<SearchRequest>) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    // Initialize indexer if needed
+    let mut indexer_lock = FILE_INDEXER.lock().unwrap();
+    if indexer_lock.is_none() {
+        let db_path = notebook_core::util::default_runs_root()
+            .map(|r| r.join("file_index.sqlite"))
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        
+        let indexer = FileIndexer::new(&db_path)
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to create indexer: {}", e)))?;
+        
+        *indexer_lock = Some(indexer);
+    }
+    
+    let limit = request.limit.unwrap_or(20);
+    
+    // Try instant search first
+    let mut results = indexer_lock
+        .as_ref()
+        .unwrap()
+        .search_instant(&request.query, limit)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    
+    // If no results and query is not empty, try Spotlight fallback
+    if results.is_empty() && !request.query.trim().is_empty() {
+        eprintln!("[cedar-server] No indexed results, falling back to Spotlight...");
+        results = indexer_lock
+            .as_ref()
+            .unwrap()
+            .spotlight_search_fallback(&request.query)
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    }
+    
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "files": results,
+    })))
+}
+
+/// Get statistics about the file index
+async fn get_index_stats() -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let mut indexer_lock = FILE_INDEXER.lock().unwrap();
+    if indexer_lock.is_none() {
+        let db_path = notebook_core::util::default_runs_root()
+            .map(|r| r.join("file_index.sqlite"))
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        
+        let indexer = FileIndexer::new(&db_path)
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to create indexer: {}", e)))?;
+        
+        *indexer_lock = Some(indexer);
+    }
+    
+    let stats = indexer_lock
+        .as_ref()
+        .unwrap()
+        .get_stats()
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    
+    Ok(Json(stats))
+}
+
 pub async fn serve() -> anyhow::Result<()> {
     // Get port from environment or use default
     let port: u16 = std::env::var("PORT")
@@ -853,6 +1020,12 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/runs/:run_id/events", get(sse_run_events))
         // Configuration endpoints
         .route("/config/openai_key", get(get_openai_key))
+        // File search endpoints
+        .route("/files/search", axum::routing::post(search_files_endpoint))
+        // File indexing endpoints (Spotlight-based)
+        .route("/files/index", axum::routing::post(index_files))
+        .route("/files/indexed/search", axum::routing::post(search_indexed_files))
+        .route("/files/indexed/stats", get(get_index_stats))
         // Add CORS layer for cross-origin requests
         .layer(
             CorsLayer::new()

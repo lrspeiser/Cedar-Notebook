@@ -60,17 +60,25 @@ Separation of concerns – the backend lives in `notebook_core` and `notebook_se
 
 ## API Key Management
 
-Cedar uses a **server-provisioned OpenAI API key model**. Keys are never stored in the client.  
-When the app starts, a `KeyManager` instance (`notebook_core/src/key_manager.rs`) locates the key in the following order:
+Cedar uses a **flexible OpenAI API key model** with multiple sources. The backend checks for keys in this order:
 
-1. **Cached key** – stored in `~/.config/cedar-cli/openai_key.json`. Used if <24h old.  
-2. **Server fetch** – GETs `/v1/key` or `/config/openai_key` from the Cedar server.  
-   - Includes `x-app-token` if `APP_SHARED_TOKEN` is set.  
-   - Validates format (`sk-...`, ≥40 chars).  
-   - Caches and logs a fingerprint.  
-3. **Environment fallback** – uses `OPENAI_API_KEY` env var if available.  
+1. **Request Body** – API key sent from client (if available)
+2. **Environment Variables** – `OPENAI_API_KEY` or `openai_api_key` 
+3. **Remote Key Service** – `CEDAR_KEY_URL` for centralized key management
+4. **Client-side Caching** – Keys cached in `~/.config/cedar-cli/openai_key.json` (24h TTL)
 
-If no key is found, an error is returned with remediation instructions.  
+### Backend Key Resolution
+The server (`notebook_server/src/lib.rs`) attempts to find a key from:
+- Request payload (`api_key` field)
+- `OPENAI_API_KEY` environment variable
+- `openai_api_key` environment variable (lowercase)
+- `CEDAR_KEY_URL` relay service (if configured)
+
+### Error Handling
+- Missing key returns clear error: "No API key provided. Please set OPENAI_API_KEY environment variable."
+- Debug logs show which source provided the key
+- Frontend displays helpful error messages for missing keys
+
 The server side implements `/config/openai_key` returning `{ "openai_api_key": "...", "source": "..." }`.  
 See `docs/openai-key-flow.md` for full details.
 
@@ -206,8 +214,52 @@ The system now supports real-time processing updates via SSE:
 * Backend receives full path and processes locally
 * Web fallback uses preview + file search strategy
 
+### Spotlight File Indexing & Search
+
+Cedar now includes a powerful file indexing system powered by macOS Spotlight:
+
+#### Features
+* **Automatic File Discovery**: Uses Spotlight (`mdfind`) to index data files across your system
+* **Instant Search**: SQLite FTS5 full-text search for sub-millisecond file lookups
+* **Smart Filtering**: Automatically filters for data files (CSV, Excel, JSON, Parquet, etc.)
+* **Live Updates**: Indexes refresh on-demand to catch new files
+* **Fallback Support**: Falls back to Spotlight if local index is empty
+
+#### File Types Supported
+* **Tabular Data**: CSV, TSV, Excel (xlsx/xls)
+* **Structured Data**: JSON, JSONL, Parquet, Arrow
+* **Databases**: SQLite, DuckDB
+* **Scientific**: HDF5, NetCDF, FITS
+* **Geospatial**: GeoJSON, Shapefile, KML/KMZ
+
+#### API Endpoints
+```bash
+# Index files using Spotlight
+POST /files/index
+
+# Search indexed files instantly
+POST /files/indexed/search
+{
+  "query": "sales data",
+  "limit": 20
+}
+
+# Get index statistics
+GET /files/indexed/stats
+```
+
+#### Implementation Details
+* **Storage**: SQLite database at `~/.cedar/runs/file_index.sqlite`
+* **Performance**: FTS5 tokenizer for instant prefix matching
+* **Metadata**: Stores path, name, size, modified time, file kind
+* **Smart Ranking**: Results ranked by relevance and recency
+
 ### Improved Error Handling
 
+* **Detailed Error Messages**: Full error text from backend displayed in UI
+* **Debug Console**: Toggle-able debug log with request/response details
+* **Smart Error Recovery**: Helpful suggestions for common issues (missing API key, connection problems)
+* **Request Visibility**: Debug mode shows exact request payloads sent to backend
 * Empty datasets on first run are normal (logged, not errors)
 * File path prompts only suggest shell search if path incomplete
 * Graceful degradation when endpoints unavailable

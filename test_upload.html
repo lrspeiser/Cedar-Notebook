@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Upload Test</title>
+</head>
+<body>
+    <h1>File Upload Test</h1>
+    
+    <div style="margin: 20px;">
+        <h2>Method 1: Standard FormData</h2>
+        <input type="file" id="file1" />
+        <button onclick="testMethod1()">Upload Method 1</button>
+        <div id="result1"></div>
+    </div>
+
+    <div style="margin: 20px;">
+        <h2>Method 2: FormData with explicit append</h2>
+        <input type="file" id="file2" />
+        <button onclick="testMethod2()">Upload Method 2</button>
+        <div id="result2"></div>
+    </div>
+
+    <div style="margin: 20px;">
+        <h2>Method 3: XMLHttpRequest</h2>
+        <input type="file" id="file3" />
+        <button onclick="testMethod3()">Upload Method 3</button>
+        <div id="result3"></div>
+    </div>
+
+    <div style="margin: 20px;">
+        <h2>Method 4: Form Submit</h2>
+        <form id="uploadForm" action="http://localhost:8080/datasets/upload" method="POST" enctype="multipart/form-data">
+            <input type="file" name="file" id="file4" />
+            <button type="submit">Upload Method 4</button>
+        </form>
+        <div id="result4"></div>
+    </div>
+
+    <script>
+        // Method 1: Standard FormData
+        async function testMethod1() {
+            const fileInput = document.getElementById('file1');
+            const file = fileInput.files[0];
+            if (!file) {
+                alert('Please select a file');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            console.log('Method 1 - FormData entries:');
+            for (let [key, value] of formData.entries()) {
+                console.log(`  ${key}:`, value);
+            }
+
+            try {
+                const response = await fetch('http://localhost:8080/datasets/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.text();
+                document.getElementById('result1').innerText = `Status: ${response.status}\nResponse: ${result}`;
+            } catch (error) {
+                document.getElementById('result1').innerText = `Error: ${error.message}`;
+            }
+        }
+
+        // Method 2: FormData with explicit file properties
+        async function testMethod2() {
+            const fileInput = document.getElementById('file2');
+            const file = fileInput.files[0];
+            if (!file) {
+                alert('Please select a file');
+                return;
+            }
+
+            const formData = new FormData();
+            // Explicitly set filename and type
+            formData.append('file', file, file.name);
+
+            console.log('Method 2 - FormData with explicit properties:');
+            for (let [key, value] of formData.entries()) {
+                console.log(`  ${key}:`, value);
+                if (value instanceof File) {
+                    console.log(`    - name: ${value.name}`);
+                    console.log(`    - type: ${value.type}`);
+                    console.log(`    - size: ${value.size}`);
+                }
+            }
+
+            try {
+                const response = await fetch('http://localhost:8080/datasets/upload', {
+                    method: 'POST',
+                    body: formData,
+                    // Don't set Content-Type, let browser set it with boundary
+                });
+
+                const result = await response.text();
+                document.getElementById('result2').innerText = `Status: ${response.status}\nResponse: ${result}`;
+            } catch (error) {
+                document.getElementById('result2').innerText = `Error: ${error.message}`;
+            }
+        }
+
+        // Method 3: Using XMLHttpRequest
+        function testMethod3() {
+            const fileInput = document.getElementById('file3');
+            const file = fileInput.files[0];
+            if (!file) {
+                alert('Please select a file');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const xhr = new XMLHttpRequest();
+            
+            xhr.onload = function() {
+                document.getElementById('result3').innerText = `Status: ${xhr.status}\nResponse: ${xhr.responseText}`;
+            };
+            
+            xhr.onerror = function() {
+                document.getElementById('result3').innerText = `Error: ${xhr.statusText}`;
+            };
+
+            xhr.open('POST', 'http://localhost:8080/datasets/upload');
+            xhr.send(formData);
+        }
+
+        // Method 4: Form submit handler
+        document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            
+            console.log('Method 4 - Form submit FormData:');
+            for (let [key, value] of formData.entries()) {
+                console.log(`  ${key}:`, value);
+            }
+
+            try {
+                const response = await fetch(this.action, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.text();
+                document.getElementById('result4').innerText = `Status: ${response.status}\nResponse: ${result}`;
+            } catch (error) {
+                document.getElementById('result4').innerText = `Error: ${error.message}`;
+            }
+        });
+    </script>
+</body>
+</html>

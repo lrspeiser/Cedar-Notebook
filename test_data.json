@@ -1,7 +1,0 @@
-[
-  {"product": "Widget A", "price": 29.99, "quantity": 100, "category": "Electronics"},
-  {"product": "Widget B", "price": 49.99, "quantity": 75, "category": "Electronics"},
-  {"product": "Gadget X", "price": 19.99, "quantity": 200, "category": "Accessories"},
-  {"product": "Gadget Y", "price": 39.99, "quantity": 50, "category": "Accessories"},
-  {"product": "Tool Pro", "price": 89.99, "quantity": 25, "category": "Tools"}
-]

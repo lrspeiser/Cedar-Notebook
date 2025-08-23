@@ -1,0 +1,1274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cedar - Data Analysis Agent</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header */
+        .header {
+            background: #2a2a2a;
+            padding: 15px 20px;
+            border-bottom: 1px solid #3a3a3a;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 20px;
+            font-weight: 600;
+            color: #4CAF50;
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #999;
+            font-size: 14px;
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #4CAF50;
+            animation: pulse 2s infinite;
+        }
+
+        .status-indicator.offline {
+            background: #f44336;
+            animation: none;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            background: #2a2a2a;
+            border-bottom: 1px solid #3a3a3a;
+            padding: 0 20px;
+        }
+
+        .tab {
+            padding: 12px 20px;
+            cursor: pointer;
+            color: #999;
+            border-bottom: 2px solid transparent;
+            transition: all 0.3s;
+            position: relative;
+        }
+
+        .tab:hover {
+            color: #ccc;
+        }
+
+        .tab.active {
+            color: #4CAF50;
+            border-bottom-color: #4CAF50;
+        }
+
+        .tab-badge {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: #4CAF50;
+            color: white;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 10px;
+            display: none;
+        }
+
+        /* Main Content */
+        .content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .tab-content {
+            display: none;
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .tab-content.active {
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Research Tab (Chat Interface) */
+        #results-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column-reverse;
+        }
+
+        .result-card {
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            border: 1px solid #3a3a3a;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-size: 14px;
+            color: #999;
+        }
+
+        .result-content {
+            color: #e0e0e0;
+            line-height: 1.6;
+        }
+
+        .code-block {
+            background: #1a1a1a;
+            border: 1px solid #3a3a3a;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            overflow-x: auto;
+            white-space: pre;
+        }
+
+        /* Progress Messages */
+        .progress-messages {
+            background: #1a1a1a;
+            border: 1px solid #3a3a3a;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .progress-message {
+            font-size: 12px;
+            color: #888;
+            margin: 4px 0;
+            padding-left: 15px;
+            position: relative;
+        }
+
+        .progress-message::before {
+            content: '▸';
+            position: absolute;
+            left: 0;
+            color: #4CAF50;
+        }
+
+        .progress-message.error {
+            color: #f44336;
+        }
+
+        .progress-message.error::before {
+            content: '✗';
+            color: #f44336;
+        }
+
+        /* Query Input */
+        .query-section {
+            padding: 20px;
+            background: #2a2a2a;
+            border-top: 1px solid #3a3a3a;
+        }
+
+        .query-input-group {
+            display: flex;
+            gap: 10px;
+            align-items: flex-start;
+        }
+
+        #queryInput {
+            flex: 1;
+            background: #1a1a1a;
+            border: 1px solid #3a3a3a;
+            color: #e0e0e0;
+            padding: 12px;
+            border-radius: 6px;
+            font-size: 14px;
+            resize: vertical;
+            min-height: 50px;
+            max-height: 150px;
+            font-family: inherit;
+        }
+
+        #queryInput:focus {
+            outline: none;
+            border-color: #4CAF50;
+        }
+
+        .query-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .btn {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background 0.3s;
+        }
+
+        .btn:hover:not(:disabled) {
+            background: #45a049;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-icon {
+            background: #3a3a3a;
+            color: #999;
+            border: 1px solid #4a4a4a;
+            padding: 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-icon:hover {
+            background: #4a4a4a;
+            color: #e0e0e0;
+        }
+
+        /* Data Tab */
+        .upload-area {
+            background: #2a2a2a;
+            border: 2px dashed #4a4a4a;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 20px;
+        }
+
+        .upload-area:hover {
+            border-color: #4CAF50;
+            background: #2f2f2f;
+        }
+
+        .upload-area.dragging {
+            border-color: #4CAF50;
+            background: #2f2f2f;
+        }
+
+        .dataset-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .dataset-card {
+            background: #2a2a2a;
+            border: 1px solid #3a3a3a;
+            border-radius: 8px;
+            padding: 15px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .dataset-card:hover {
+            border-color: #4CAF50;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+
+        .dataset-title {
+            font-weight: 600;
+            color: #4CAF50;
+            margin-bottom: 8px;
+        }
+
+        .dataset-description {
+            color: #999;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+
+        .dataset-meta {
+            display: flex;
+            gap: 15px;
+            font-size: 12px;
+            color: #666;
+        }
+
+        /* Dataset Detail Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.8);
+            z-index: 1000;
+            animation: fadeIn 0.3s;
+        }
+
+        .modal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .modal-content {
+            background: #2a2a2a;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 1200px;
+            max-height: 90vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            animation: slideUp 0.3s;
+        }
+
+        @keyframes slideUp {
+            from {
+                transform: translateY(20px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .modal-header {
+            padding: 20px;
+            border-bottom: 1px solid #3a3a3a;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: #4CAF50;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: #999;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-close:hover {
+            color: #e0e0e0;
+        }
+
+        .modal-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .data-section {
+            margin-bottom: 30px;
+        }
+
+        .data-section h3 {
+            color: #4CAF50;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: #1a1a1a;
+            border: 1px solid #3a3a3a;
+            border-radius: 6px;
+            padding: 12px;
+        }
+
+        .stat-label {
+            color: #666;
+            font-size: 12px;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            color: #e0e0e0;
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        .data-table th {
+            background: #1a1a1a;
+            color: #4CAF50;
+            padding: 10px;
+            text-align: left;
+            border: 1px solid #3a3a3a;
+            position: sticky;
+            top: 0;
+        }
+
+        .data-table td {
+            padding: 8px 10px;
+            border: 1px solid #3a3a3a;
+            color: #e0e0e0;
+        }
+
+        .data-table tr:hover {
+            background: #333;
+        }
+
+        .column-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 10px;
+        }
+
+        .column-card {
+            background: #1a1a1a;
+            border: 1px solid #3a3a3a;
+            border-radius: 6px;
+            padding: 10px;
+        }
+
+        .column-name {
+            color: #4CAF50;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .column-type {
+            color: #999;
+            font-size: 12px;
+        }
+
+        .column-stats {
+            margin-top: 8px;
+            font-size: 11px;
+            color: #666;
+        }
+
+        /* Spinner */
+        .spinner {
+            border: 3px solid #3a3a3a;
+            border-top: 3px solid #4CAF50;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            margin: 10px auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* File input hidden */
+        #fileInput {
+            display: none;
+        }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #1a1a1a;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #4a4a4a;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #5a5a5a;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">
+            🌲 Cedar
+        </div>
+        <div class="status">
+            <span id="statusIndicator" class="status-indicator"></span>
+            <span id="statusText">Connecting...</span>
+        </div>
+    </div>
+
+    <div class="tabs">
+        <div class="tab active" onclick="switchTab('research')">
+            Research
+        </div>
+        <div class="tab" onclick="switchTab('data')">
+            Data
+            <span class="tab-badge" id="dataBadge">0</span>
+        </div>
+        <div class="tab" onclick="switchTab('history')">
+            History
+        </div>
+    </div>
+
+    <div class="content">
+        <!-- Research Tab -->
+        <div id="research-tab" class="tab-content active">
+            <div id="results-container">
+                <div style="text-align: center; color: #666; padding: 40px;">
+                    <h3>Welcome to Cedar Agent</h3>
+                    <p style="margin-top: 10px;">Ask any question or upload data to get started</p>
+                </div>
+            </div>
+            
+            <div class="query-section">
+                <div class="query-input-group">
+                    <textarea id="queryInput" placeholder="Ask a question or describe what you need..." onkeydown="handleQueryKeydown(event)"></textarea>
+                    <div class="query-actions">
+                        <button id="submitBtn" class="btn" onclick="submitQuery()">Submit Query</button>
+                        <button class="btn-icon" onclick="triggerFileSelect()" title="Upload Files">📁</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Tab -->
+        <div id="data-tab" class="tab-content">
+            <div class="upload-area" onclick="triggerFileSelect()" ondrop="handleDrop(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
+                <h3>📁 Drop files here or click to upload</h3>
+                <p style="margin-top: 10px; color: #666;">Supports CSV, Excel, JSON, and Parquet files</p>
+            </div>
+            
+            <div class="dataset-grid" id="datasetGrid">
+                <!-- Datasets will be populated here -->
+            </div>
+        </div>
+
+        <!-- History Tab -->
+        <div id="history-tab" class="tab-content">
+            <div id="history-container">
+                <!-- Query history will be shown here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Dataset Detail Modal -->
+    <div id="datasetModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="modalTitle">Dataset Details</h2>
+                <button class="modal-close" onclick="closeModal()">×</button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <!-- Dataset details will be populated here -->
+            </div>
+        </div>
+    </div>
+
+    <input type="file" id="fileInput" multiple accept=".csv,.xlsx,.xls,.json,.parquet" onchange="handleFileSelect(event)">
+
+    <script>
+        const API_URL = 'http://localhost:8080';
+        let datasets = [];
+        let queryHistory = [];
+        let activeEventSource = null;
+
+        // Initialize the app
+        async function init() {
+            await checkConnection();
+            await loadDatasets();
+            loadHistory();
+        }
+
+        // Check server connection
+        async function checkConnection() {
+            try {
+                const response = await fetch(`${API_URL}/health`);
+                setConnectionStatus(response.ok);
+            } catch (error) {
+                setConnectionStatus(false);
+            }
+        }
+
+        function setConnectionStatus(connected) {
+            const indicator = document.getElementById('statusIndicator');
+            const text = document.getElementById('statusText');
+            
+            if (connected) {
+                indicator.classList.remove('offline');
+                text.textContent = 'Connected to Cedar Backend';
+            } else {
+                indicator.classList.add('offline');
+                text.textContent = 'Backend Offline';
+            }
+        }
+
+        // Tab switching
+        function switchTab(tabName) {
+            // Update tab buttons
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            // Update tab content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(`${tabName}-tab`).classList.add('active');
+            
+            // Load data if switching to data tab
+            if (tabName === 'data') {
+                loadDatasets();
+            }
+        }
+
+        // Submit query with SSE progress streaming
+        async function submitQuery() {
+            const input = document.getElementById('queryInput');
+            const query = input.value.trim();
+            
+            if (!query) return;
+            
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Processing...';
+            
+            // Add query card with progress area
+            const cardId = addQueryCard(query);
+            
+            try {
+                // Submit the query
+                const response = await fetch(`${API_URL}/commands/submit_query`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt: query })
+                });
+                
+                const result = await response.json();
+                
+                if (result.run_id) {
+                    // Start SSE connection for progress updates
+                    connectToSSE(result.run_id, cardId);
+                }
+                
+                // Update card with result
+                updateQueryCard(cardId, result);
+                
+                // Add to history
+                queryHistory.unshift({
+                    query: query,
+                    result: result,
+                    timestamp: new Date()
+                });
+                saveHistory();
+                
+                // Clear input
+                input.value = '';
+                
+            } catch (error) {
+                console.error('Query error:', error);
+                updateQueryCard(cardId, { error: error.message });
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Submit Query';
+            }
+        }
+
+        // Connect to SSE for real-time progress
+        function connectToSSE(runId, cardId) {
+            if (activeEventSource) {
+                activeEventSource.close();
+            }
+            
+            activeEventSource = new EventSource(`${API_URL}/runs/${runId}/events`);
+            
+            activeEventSource.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    addProgressMessage(cardId, data.message || 'Processing...', data.type);
+                } catch (e) {
+                    console.error('SSE parse error:', e);
+                }
+            };
+            
+            activeEventSource.onerror = (error) => {
+                console.error('SSE error:', error);
+                activeEventSource.close();
+                activeEventSource = null;
+            };
+            
+            // Auto-close after 60 seconds
+            setTimeout(() => {
+                if (activeEventSource) {
+                    activeEventSource.close();
+                    activeEventSource = null;
+                }
+            }, 60000);
+        }
+
+        // Add query card
+        function addQueryCard(query) {
+            const container = document.getElementById('results-container');
+            
+            // Clear welcome message
+            const welcome = container.querySelector('div[style*="text-align: center"]');
+            if (welcome) welcome.remove();
+            
+            const card = document.createElement('div');
+            card.className = 'result-card';
+            card.id = `card-${Date.now()}`;
+            
+            card.innerHTML = `
+                <div class="result-header">
+                    <strong>Query:</strong>
+                    <span class="result-timestamp">${new Date().toLocaleTimeString()}</span>
+                </div>
+                <div class="result-content">${escapeHtml(query)}</div>
+                <div class="progress-messages" id="${card.id}-progress">
+                    <div class="progress-message">Submitting query to agent...</div>
+                </div>
+                <div class="spinner"></div>
+            `;
+            
+            container.insertBefore(card, container.firstChild);
+            return card.id;
+        }
+
+        // Add progress message
+        function addProgressMessage(cardId, message, type = 'info') {
+            const progressContainer = document.getElementById(`${cardId}-progress`);
+            if (!progressContainer) return;
+            
+            const msgElement = document.createElement('div');
+            msgElement.className = `progress-message ${type === 'error' ? 'error' : ''}`;
+            msgElement.textContent = message;
+            
+            progressContainer.appendChild(msgElement);
+            progressContainer.scrollTop = progressContainer.scrollHeight;
+        }
+
+        // Update query card with result
+        function updateQueryCard(cardId, result) {
+            const card = document.getElementById(cardId);
+            if (!card) return;
+            
+            // Remove spinner
+            const spinner = card.querySelector('.spinner');
+            if (spinner) spinner.remove();
+            
+            // Close SSE if still open
+            if (activeEventSource) {
+                activeEventSource.close();
+                activeEventSource = null;
+            }
+            
+            if (result.error) {
+                addProgressMessage(cardId, `Error: ${result.error}`, 'error');
+                return;
+            }
+            
+            // Add final response
+            if (result.response) {
+                const responseDiv = document.createElement('div');
+                responseDiv.style.marginTop = '15px';
+                responseDiv.innerHTML = `<strong>Response:</strong><div style="margin-top: 8px;">${escapeHtml(result.response)}</div>`;
+                card.appendChild(responseDiv);
+            }
+            
+            // Add code blocks if present
+            if (result.julia_code) {
+                const codeDiv = document.createElement('div');
+                codeDiv.innerHTML = `
+                    <strong style="display: block; margin-top: 15px;">Julia Code:</strong>
+                    <div class="code-block">${escapeHtml(result.julia_code)}</div>
+                `;
+                card.appendChild(codeDiv);
+            }
+            
+            if (result.execution_output) {
+                const outputDiv = document.createElement('div');
+                outputDiv.innerHTML = `
+                    <strong style="display: block; margin-top: 15px;">Execution Output:</strong>
+                    <div class="code-block">${escapeHtml(result.execution_output)}</div>
+                `;
+                card.appendChild(outputDiv);
+            }
+            
+            // Refresh datasets if this was a data operation
+            if (result.response && result.response.toLowerCase().includes('parquet')) {
+                setTimeout(loadDatasets, 1000);
+            }
+        }
+
+        // File handling
+        function triggerFileSelect() {
+            document.getElementById('fileInput').click();
+        }
+
+        async function handleFileSelect(event) {
+            const files = Array.from(event.target.files);
+            if (files.length > 0) {
+                await uploadFiles(files);
+            }
+        }
+
+        function handleDrop(event) {
+            event.preventDefault();
+            event.currentTarget.classList.remove('dragging');
+            
+            const files = Array.from(event.dataTransfer.files);
+            if (files.length > 0) {
+                uploadFiles(files);
+            }
+        }
+
+        function handleDragOver(event) {
+            event.preventDefault();
+            event.currentTarget.classList.add('dragging');
+        }
+
+        function handleDragLeave(event) {
+            event.currentTarget.classList.remove('dragging');
+        }
+
+        // Upload files
+        async function uploadFiles(files) {
+            // Switch to Research tab to show progress
+            switchToResearchTab();
+            
+            for (const file of files) {
+                const cardId = addUploadCard(file);
+                
+                try {
+                    // Read file preview
+                    const preview = await readFilePreview(file);
+                    
+                    // Create prompt for LLM
+                    const prompt = `I have a ${file.type || 'data'} file that needs to be processed and loaded into our data system.
+
+File Information:
+- Name: ${file.name}
+- Size: ${formatFileSize(file.size)}
+- Type: ${file.type || 'Unknown'}
+
+First 30 lines of the file:
+\`\`\`
+${preview}
+\`\`\`
+
+IMPORTANT: The file "${file.name}" is located somewhere on the user's system. Please follow these steps:
+1. First, use a shell command to find the location of the file "${file.name}" on the system. Search in common locations like Downloads, Desktop, Documents, and the home directory.
+2. Once you find the file path, write Julia code to:
+   - Load the CSV file from the found path
+   - Analyze its structure and data types
+   - Clean and validate the data
+   - Convert it to Parquet format for efficient storage
+   - Load the Parquet file into DuckDB
+   - Run queries to show:
+     * Total row count
+     * Column names and types  
+     * First 5 rows
+     * Basic statistics for numeric columns
+
+Provide a final summary of the dataset.`;
+                    
+                    // Submit via query endpoint
+                    const response = await fetch(`${API_URL}/commands/submit_query`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ prompt: prompt })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.run_id) {
+                        connectToSSE(result.run_id, cardId);
+                    }
+                    
+                    updateUploadCard(cardId, result);
+                    
+                } catch (error) {
+                    updateUploadCard(cardId, { error: error.message });
+                }
+            }
+            
+            // Refresh datasets after upload
+            setTimeout(loadDatasets, 2000);
+        }
+
+        // Add upload card
+        function addUploadCard(file) {
+            const container = document.getElementById('results-container');
+            
+            const card = document.createElement('div');
+            card.className = 'result-card';
+            card.id = `upload-${Date.now()}`;
+            
+            card.innerHTML = `
+                <div class="result-header">
+                    <strong>📁 Processing File:</strong>
+                    <span class="result-timestamp">${new Date().toLocaleTimeString()}</span>
+                </div>
+                <div class="result-content">
+                    <strong>File:</strong> ${escapeHtml(file.name)}<br>
+                    <strong>Size:</strong> ${formatFileSize(file.size)}<br>
+                    <strong>Type:</strong> ${escapeHtml(file.type || 'Unknown')}
+                </div>
+                <div class="progress-messages" id="${card.id}-progress">
+                    <div class="progress-message">Reading file preview...</div>
+                </div>
+                <div class="spinner"></div>
+            `;
+            
+            container.insertBefore(card, container.firstChild);
+            return card.id;
+        }
+
+        // Update upload card
+        function updateUploadCard(cardId, result) {
+            updateQueryCard(cardId, result);
+        }
+
+        // Read file preview
+        async function readFilePreview(file, lines = 30) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                
+                // Read only first 100KB to avoid loading huge files
+                const slice = file.slice(0, 102400);
+                
+                reader.onload = (e) => {
+                    const text = e.target.result;
+                    const lineArray = text.split('\n').slice(0, lines);
+                    resolve(lineArray.join('\n'));
+                };
+                
+                reader.onerror = reject;
+                reader.readAsText(slice);
+            });
+        }
+
+        // Load datasets
+        async function loadDatasets() {
+            try {
+                const response = await fetch(`${API_URL}/datasets`);
+                const data = await response.json();
+                
+                datasets = data.datasets || [];
+                displayDatasets(datasets);
+                
+                // Update badge
+                const badge = document.getElementById('dataBadge');
+                if (datasets.length > 0) {
+                    badge.textContent = datasets.length;
+                    badge.style.display = 'block';
+                } else {
+                    badge.style.display = 'none';
+                }
+            } catch (error) {
+                console.error('Failed to load datasets:', error);
+            }
+        }
+
+        // Display datasets
+        function displayDatasets(datasets) {
+            const grid = document.getElementById('datasetGrid');
+            
+            if (datasets.length === 0) {
+                grid.innerHTML = '<p style="color: #999; text-align: center; grid-column: 1/-1;">No datasets available. Upload files to create datasets.</p>';
+                return;
+            }
+            
+            grid.innerHTML = datasets.map(ds => `
+                <div class="dataset-card" onclick="showDatasetDetails('${ds.id}')">
+                    <div class="dataset-title">${escapeHtml(ds.title || ds.file_name)}</div>
+                    <div class="dataset-description">${escapeHtml(ds.description || 'No description available')}</div>
+                    <div class="dataset-meta">
+                        <span>📊 ${ds.row_count || 0} rows</span>
+                        <span>📋 ${ds.column_count || 0} cols</span>
+                        <span>💾 ${formatFileSize(ds.file_size || 0)}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Show dataset details in modal
+        async function showDatasetDetails(datasetId) {
+            const modal = document.getElementById('datasetModal');
+            const modalBody = document.getElementById('modalBody');
+            const modalTitle = document.getElementById('modalTitle');
+            
+            modal.classList.add('active');
+            modalBody.innerHTML = '<div class="spinner"></div>';
+            
+            try {
+                const response = await fetch(`${API_URL}/datasets/${datasetId}`);
+                const dataset = await response.json();
+                
+                modalTitle.textContent = dataset.title || dataset.file_name;
+                
+                let html = '';
+                
+                // Description
+                if (dataset.description) {
+                    html += `
+                        <div class="data-section">
+                            <h3>Description</h3>
+                            <p>${escapeHtml(dataset.description)}</p>
+                        </div>
+                    `;
+                }
+                
+                // Statistics
+                html += `
+                    <div class="data-section">
+                        <h3>Dataset Statistics</h3>
+                        <div class="stats-grid">
+                            <div class="stat-card">
+                                <div class="stat-label">Total Rows</div>
+                                <div class="stat-value">${dataset.row_count || 0}</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label">Total Columns</div>
+                                <div class="stat-value">${dataset.column_count || 0}</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label">File Size</div>
+                                <div class="stat-value">${formatFileSize(dataset.file_size || 0)}</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label">Format</div>
+                                <div class="stat-value">${dataset.format || 'Parquet'}</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // Column Information
+                if (dataset.column_info && dataset.column_info.length > 0) {
+                    html += `
+                        <div class="data-section">
+                            <h3>Column Information</h3>
+                            <div class="column-info">
+                                ${dataset.column_info.map(col => `
+                                    <div class="column-card">
+                                        <div class="column-name">${escapeHtml(col.name)}</div>
+                                        <div class="column-type">Type: ${col.type}</div>
+                                        ${col.description ? `<div style="color: #999; font-size: 12px; margin-top: 5px;">${escapeHtml(col.description)}</div>` : ''}
+                                        <div class="column-stats">
+                                            ${col.min !== undefined ? `Min: ${col.min}<br>` : ''}
+                                            ${col.max !== undefined ? `Max: ${col.max}<br>` : ''}
+                                            ${col.mean !== undefined ? `Mean: ${col.mean.toFixed(2)}<br>` : ''}
+                                            ${col.null_count !== undefined ? `Nulls: ${col.null_count}` : ''}
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                // Data Preview
+                if (dataset.preview_data && dataset.preview_data.length > 0) {
+                    const columns = Object.keys(dataset.preview_data[0]);
+                    html += `
+                        <div class="data-section">
+                            <h3>Data Preview (First 30 rows)</h3>
+                            <div style="overflow-x: auto;">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            ${columns.map(col => `<th>${escapeHtml(col)}</th>`).join('')}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${dataset.preview_data.slice(0, 30).map(row => `
+                                            <tr>
+                                                ${columns.map(col => `<td>${escapeHtml(String(row[col] || ''))}</td>`).join('')}
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                modalBody.innerHTML = html;
+                
+            } catch (error) {
+                modalBody.innerHTML = `<p style="color: #f44336;">Error loading dataset: ${error.message}</p>`;
+            }
+        }
+
+        // Close modal
+        function closeModal() {
+            document.getElementById('datasetModal').classList.remove('active');
+        }
+
+        // History management
+        function loadHistory() {
+            const saved = localStorage.getItem('cedarHistory');
+            if (saved) {
+                queryHistory = JSON.parse(saved);
+            }
+            displayHistory();
+        }
+
+        function saveHistory() {
+            localStorage.setItem('cedarHistory', JSON.stringify(queryHistory.slice(0, 100)));
+            displayHistory();
+        }
+
+        function displayHistory() {
+            const container = document.getElementById('history-container');
+            
+            if (queryHistory.length === 0) {
+                container.innerHTML = '<p style="color: #999; text-align: center; padding: 40px;">No query history yet</p>';
+                return;
+            }
+            
+            container.innerHTML = queryHistory.map(item => `
+                <div class="result-card">
+                    <div class="result-header">
+                        <strong>Query:</strong>
+                        <span class="result-timestamp">${new Date(item.timestamp).toLocaleString()}</span>
+                    </div>
+                    <div class="result-content">${escapeHtml(item.query)}</div>
+                    ${item.result.response ? `
+                        <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #3a3a3a;">
+                            <strong>Response:</strong>
+                            <div style="margin-top: 5px;">${escapeHtml(item.result.response)}</div>
+                        </div>
+                    ` : ''}
+                </div>
+            `).join('');
+        }
+
+        // Utility functions
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function handleQueryKeydown(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                submitQuery();
+            }
+        }
+
+        function switchToResearchTab() {
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelector('.tab:first-child').classList.add('active');
+            
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById('research-tab').classList.add('active');
+        }
+
+        // Initialize on load
+        window.addEventListener('load', init);
+        
+        // Close modal on escape
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeModal();
+            }
+        });
+    </script>
+</body>
+</html>

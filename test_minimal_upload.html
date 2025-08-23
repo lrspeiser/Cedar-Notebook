@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Minimal Upload Test</title>
+</head>
+<body>
+    <h1>Minimal File Upload Test</h1>
+    
+    <input type="file" id="fileInput" />
+    <button onclick="testUpload()">Upload</button>
+    <pre id="output"></pre>
+
+    <script>
+        async function testUpload() {
+            const output = document.getElementById('output');
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                output.textContent = 'Please select a file';
+                return;
+            }
+            
+            output.textContent = 'Uploading...\n';
+            
+            // Create FormData
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            // Log details
+            console.log('File details:', {
+                name: file.name,
+                size: file.size,
+                type: file.type,
+                lastModified: file.lastModified
+            });
+            
+            try {
+                // Send request
+                const response = await fetch('http://localhost:8080/datasets/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                output.textContent += `Status: ${response.status} ${response.statusText}\n`;
+                
+                const text = await response.text();
+                output.textContent += `Response: ${text}\n`;
+                
+                // Try to parse as JSON
+                try {
+                    const json = JSON.parse(text);
+                    output.textContent += `\nParsed JSON:\n${JSON.stringify(json, null, 2)}`;
+                } catch (e) {
+                    // Not JSON, that's ok
+                }
+                
+            } catch (error) {
+                output.textContent += `Error: ${error.message}\n`;
+                console.error('Upload error:', error);
+            }
+        }
+    </script>
+</body>
+</html>

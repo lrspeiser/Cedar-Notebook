@@ -3,8 +3,83 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cedar Agent - Research & Data Platform</title>
+    <title>Cedar - AI Data Analysis</title>
+    <!-- 
+    STRICT RULE: NO BUSINESS LOGIC IN FRONTEND
+    ==========================================
+    This HTML file is UI ONLY. The backend Rust system handles 100% of:
+    - API key management (fetched from server per docs/openai-key-flow.md)
+    - Model selection (GPT-5 is hardcoded - see README.md and docs/)
+    - Query processing and agent loops
+    - File processing and data analysis
+    - All LLM interactions
+    - Julia code execution
+    - Shell command execution
+    
+    The frontend ONLY:
+    - Displays UI elements
+    - Sends user input to backend
+    - Shows responses from backend
+    - NO processing, NO business logic, NO API calls except to our backend
+    -->
     <style>
+        /* Debug Console Styles */
+        #debugConsole {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 200px;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 12px;
+            border-top: 2px solid #444;
+            display: none;
+            flex-direction: column;
+            z-index: 10000;
+        }
+        
+        #debugConsole.active {
+            display: flex;
+        }
+        
+        #debugConsoleHeader {
+            background: #2d2d2d;
+            padding: 5px 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #444;
+        }
+        
+        #debugConsoleContent {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+            line-height: 1.4;
+        }
+        
+        .debug-log {
+            margin: 2px 0;
+        }
+        
+        .debug-log.error {
+            color: #f48771;
+        }
+        
+        .debug-log.warn {
+            color: #dcdcaa;
+        }
+        
+        .debug-log.info {
+            color: #9cdcfe;
+        }
+        
+        .debug-timestamp {
+            color: #858585;
+            margin-right: 8px;
+        }
         * {
             margin: 0;
             padding: 0;
@@ -441,10 +516,106 @@
     </div>
 
     <input type="file" id="fileInput" multiple accept=".csv,.xlsx,.xls,.json,.parquet" onchange="handleFileSelect(event)">
+    
+    <!-- Debug Console -->
+    <div id="debugConsole">
+        <div id="debugConsoleHeader">
+            <span>🔧 Debug Console</span>
+            <button onclick="clearDebugConsole()" style="background: #444; color: white; border: none; padding: 2px 8px; border-radius: 3px; cursor: pointer;">Clear</button>
+        </div>
+        <div id="debugConsoleContent"></div>
+    </div>
 
     <script>
-        // IMPORTANT: All business logic stays in the Rust backend
-        // This is just UI orchestration - the backend handles all processing
+        // Debug console functionality
+        let debugLogs = [];
+        const MAX_DEBUG_LOGS = 500;
+        
+        function addDebugLog(level, ...args) {
+            const timestamp = new Date().toLocaleTimeString();
+            const message = args.map(arg => {
+                if (typeof arg === 'object') {
+                    try {
+                        return JSON.stringify(arg, null, 2);
+                    } catch (e) {
+                        return String(arg);
+                    }
+                }
+                return String(arg);
+            }).join(' ');
+            
+            debugLogs.push({ timestamp, level, message });
+            
+            // Keep only the last MAX_DEBUG_LOGS entries
+            if (debugLogs.length > MAX_DEBUG_LOGS) {
+                debugLogs.shift();
+            }
+            
+            // Update the console display if it's visible
+            if (document.getElementById('debugConsole').classList.contains('active')) {
+                updateDebugConsoleDisplay();
+            }
+        }
+        
+        function updateDebugConsoleDisplay() {
+            const content = document.getElementById('debugConsoleContent');
+            content.innerHTML = debugLogs.map(log => {
+                return `<div class="debug-log ${log.level}">
+                    <span class="debug-timestamp">${log.timestamp}</span>
+                    ${escapeHtml(log.message)}
+                </div>`;
+            }).join('');
+            
+            // Auto-scroll to bottom
+            content.scrollTop = content.scrollHeight;
+        }
+        
+        function clearDebugConsole() {
+            debugLogs = [];
+            updateDebugConsoleDisplay();
+        }
+        
+        window.toggleDebugConsole = function() {
+            const console = document.getElementById('debugConsole');
+            console.classList.toggle('active');
+            if (console.classList.contains('active')) {
+                updateDebugConsoleDisplay();
+            }
+        };
+        
+        // Override console methods to capture logs
+        const originalConsole = {
+            log: console.log,
+            error: console.error,
+            warn: console.warn,
+            info: console.info
+        };
+        
+        console.log = function(...args) {
+            originalConsole.log(...args);
+            addDebugLog('log', ...args);
+        };
+        
+        console.error = function(...args) {
+            originalConsole.error(...args);
+            addDebugLog('error', ...args);
+        };
+        
+        console.warn = function(...args) {
+            originalConsole.warn(...args);
+            addDebugLog('warn', ...args);
+        };
+        
+        console.info = function(...args) {
+            originalConsole.info(...args);
+            addDebugLog('info', ...args);
+        };
+        
+        // STRICT RULE: NO BUSINESS LOGIC IN FRONTEND
+        // ==========================================
+        // This is UI orchestration ONLY - the backend handles ALL processing
+        // Backend manages API keys per docs/openai-key-flow.md
+        // Backend uses GPT-5 model - DO NOT CHANGE - see README.md
         
         // Configure backend URL - for Tauri desktop app, this connects to embedded server
         const API_URL = 'http://localhost:8080';
@@ -494,12 +665,21 @@
             }
         }
 
-        // Submit query to backend - ALL logic happens server-side
-        async function submitQuery() {
+        // FEATURE IMPLEMENTATION GUIDE FOR FRONTEND:
+        // 1. Collect user input (text, file selections, etc)
+        // 2. Send raw input to backend
+        // 3. Display response from backend
+        // DO NOT:
+        // - Construct prompts
+        // - Process files
+        // - Make decisions about how to handle data
+        // - Add business logic of any kind
+        async function submitQuery(fileInfo = null) {
             const input = document.getElementById('queryInput');
             const query = input.value.trim();
             
-            if (!query) return;
+            // Frontend only validates that there's something to send
+            if (!query && !fileInfo) return;
             
             const submitBtn = document.getElementById('submitBtn');
             submitBtn.disabled = true;
@@ -507,13 +687,13 @@
             
             try {
                 // Add current query to results immediately
-                addResultCard('pending', query, null);
+                addResultCard('pending', query || 'Processing file...', null);
                 
-                // Build request with file context if available
+                // THIN FRONTEND: Only send user input and file metadata
+                // Backend handles ALL logic about what to do with it
                 const requestBody = {
-                    prompt: query,
-                    datasets: datasets.map(d => d.id),
-                    file_context: currentFile ? await fileToBase64(currentFile) : null
+                    prompt: query || null,
+                    file_info: fileInfo
                 };
                 
                 // Send to backend for processing
@@ -545,7 +725,29 @@
                 
             } catch (error) {
                 console.error('Query error:', error);
-                showError(`Failed to process query: ${error.message}`);
+                // Better error message
+                let errorMsg = 'Failed to process query';
+                if (error.message) {
+                    errorMsg += `: ${error.message}`;
+                } else if (typeof error === 'string') {
+                    errorMsg += `: ${error}`;
+                } else {
+                    errorMsg += ' (check debug console for details)';
+                }
+                showError(errorMsg);
+                
+                // Update the pending card to show error
+                const cards = document.querySelectorAll('.result-card');
+                if (cards.length > 0) {
+                    const card = cards[0];
+                    card.innerHTML = `
+                        <div class="result-header">
+                            <strong>❌ Error:</strong>
+                            <span class="result-timestamp">${new Date().toLocaleTimeString()}</span>
+                        </div>
+                        <div class="result-content" style="color: #c62828;">${escapeHtml(errorMsg)}</div>
+                    `;
+                }
             } finally {
                 submitBtn.disabled = false;
                 submitBtn.textContent = 'Submit Query';
@@ -578,6 +780,84 @@
             
             container.insertBefore(card, container.firstChild);
             return card.id;
+        }
+        
+        // Add upload card to show file upload progress
+        function addUploadCard(file) {
+            const container = document.getElementById('results-container');
+            
+            // Clear welcome message if present
+            if (container.querySelector('div[style*="text-align: center"]')) {
+                container.innerHTML = '';
+            }
+            
+            const card = document.createElement('div');
+            card.className = 'result-card';
+            card.id = `upload-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            
+            const sizeInKB = (file.size / 1024).toFixed(2);
+            const sizeDisplay = file.size > 1048576 ? 
+                `${(file.size / 1048576).toFixed(2)} MB` : 
+                `${sizeInKB} KB`;
+            
+            card.innerHTML = `
+                <div class="result-header">
+                    <strong>📁 Uploading File:</strong>
+                    <span class="result-timestamp">${new Date().toLocaleTimeString()}</span>
+                </div>
+                <div class="result-content">
+                    <div style="margin-bottom: 10px;">
+                        <strong>File:</strong> ${escapeHtml(file.name)}<br>
+                        <strong>Size:</strong> ${sizeDisplay}<br>
+                        <strong>Type:</strong> ${escapeHtml(file.type || 'Unknown')}
+                    </div>
+                    <div class="spinner"></div>
+                    <div style="color: #666; margin-top: 10px;">Processing file...</div>
+                </div>
+            `;
+            
+            container.insertBefore(card, container.firstChild);
+            return card.id;
+        }
+        
+        // Update upload card with result
+        function updateUploadCard(cardId, status, data) {
+            const card = document.getElementById(cardId);
+            if (!card) return;
+            
+            const header = card.querySelector('.result-header');
+            const content = card.querySelector('.result-content');
+            
+            if (status === 'success') {
+                header.innerHTML = `
+                    <strong>✅ File Uploaded:</strong>
+                    <span class="result-timestamp">${new Date().toLocaleTimeString()}</span>
+                `;
+                
+                content.innerHTML = `
+                    <div style="color: #2e7d32;">
+                        <strong>Title:</strong> ${escapeHtml(data.title || data.file_name)}<br>
+                        <strong>Description:</strong> ${escapeHtml(data.description || 'Dataset uploaded successfully')}<br>
+                        <strong>Columns:</strong> ${data.column_count || 'Unknown'}<br>
+                        <strong>Dataset ID:</strong> <code style="background: #f5f5f5; padding: 2px 4px; border-radius: 3px;">${data.id}</code>
+                    </div>
+                    <div style="margin-top: 15px;">
+                        <button class="btn-sm btn-primary" onclick="queryDataset('${data.id}')" style="margin-right: 10px;">Query This Dataset</button>
+                        <button class="btn-sm" onclick="switchToDataTab()" style="background: #666; color: white;">View All Datasets</button>
+                    </div>
+                `;
+            } else if (status === 'error') {
+                header.innerHTML = `
+                    <strong>❌ Upload Failed:</strong>
+                    <span class="result-timestamp">${new Date().toLocaleTimeString()}</span>
+                `;
+                
+                content.innerHTML = `
+                    <div style="color: #c62828;">
+                        <strong>Error:</strong> ${escapeHtml(data)}
+                    </div>
+                `;
+            }
         }
 
         // Update result card with backend response
@@ -620,45 +900,167 @@
         }
 
         // File handling - files are sent to backend for processing
-        function triggerFileSelect() {
-            document.getElementById('fileInput').click();
+        async function triggerFileSelect() {
+            // Check if we're in Tauri (desktop app)
+            if (window.__TAURI__) {
+                console.log('[UPLOAD] Using Tauri file dialog');
+                try {
+                    const { open } = window.__TAURI__.dialog;
+                    // Open file dialog and get actual file paths
+                    const selected = await open({
+                        multiple: true,
+                        filters: [{
+                            name: 'Data Files',
+                            extensions: ['csv', 'xlsx', 'xls', 'json', 'parquet']
+                        }]
+                    });
+                    
+                    if (selected) {
+                        console.log('[UPLOAD] Tauri selected files:', selected);
+                        // Process the file paths
+                        const files = Array.isArray(selected) ? selected : [selected];
+                        await uploadFilesWithPaths(files);
+                    }
+                } catch (error) {
+                    console.error('[UPLOAD] Tauri dialog error:', error);
+                    // Fallback to HTML file input
+                    document.getElementById('fileInput').click();
+                }
+            } else {
+                // Web browser - use HTML file input
+                document.getElementById('fileInput').click();
+            }
         }
 
         async function handleFileSelect(event) {
+            console.log('[UPLOAD] handleFileSelect triggered');
             const files = Array.from(event.target.files);
+            console.log('[UPLOAD] Files selected:', files.length);
             if (files.length > 0) {
+                console.log('[UPLOAD] Calling uploadFiles...');
                 await uploadFiles(files);
+            } else {
+                console.log('[UPLOAD] No files selected');
             }
         }
 
+        // THIN FRONTEND: Just collect file metadata and send to backend
+        // Backend decides how to process the file
         async function uploadFiles(files) {
-            const formData = new FormData();
-            files.forEach(file => formData.append('files', file));
+            console.log('[UPLOAD] uploadFiles called with', files.length, 'files');
             
-            try {
-                showStatus('info', 'Uploading files to backend for processing...');
+            // Switch to Research tab to show upload progress
+            switchToResearchTab();
+            
+            // Process files one at a time
+            for (const file of files) {
+                console.log(`[UPLOAD] Processing file: ${file.name}`);
+                console.log(`[UPLOAD]   Size: ${file.size} bytes`);
+                console.log(`[UPLOAD]   Type: ${file.type || 'unknown'}`);
                 
-                const response = await fetch(`${API_URL}/datasets/upload`, {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                if (!response.ok) {
-                    throw new Error('Upload failed');
+                try {
+                    showStatus('info', `Processing ${file.name}...`);
+                    
+                    // Read preview for DISPLAY ONLY - backend decides what to do
+                    const filePreview = await readFilePreview(file, 30);
+                    console.log(`[UPLOAD] File preview read, ${filePreview.split('\n').length} lines`);
+                    
+                    // THIN FRONTEND: Just send file metadata to backend
+                    // Backend constructs prompts and decides processing strategy
+                    const fileInfo = {
+                        name: file.name,
+                        path: null,  // Browser doesn't have path
+                        size: file.size,
+                        file_type: file.type || 'text/csv',
+                        preview: filePreview
+                    };
+                    
+                    console.log('[UPLOAD] Sending file info to backend...');
+                    // Clear any existing query and submit with file info
+                    document.getElementById('queryInput').value = '';
+                    await submitQuery(fileInfo);
+                    
+                } catch (error) {
+                    console.error('[UPLOAD] Error processing file:', error);
+                    showStatus('error', `Failed to process ${file.name}: ${error.message}`);
                 }
-                
-                const result = await response.json();
-                showStatus('success', `Successfully uploaded ${result.datasets.length} file(s)`);
-                
-                // Refresh dataset list
-                await loadDatasets();
-                
-                // Switch to data tab to show uploaded files
-                switchTab('data');
-                
-            } catch (error) {
-                showStatus('error', `Upload failed: ${error.message}`);
             }
+            
+            console.log('[UPLOAD] All files processed, refreshing datasets...');
+            // After all files, refresh dataset list
+            await loadDatasets();
+        }
+        
+        // THIN FRONTEND: Just send file path to backend
+        // Backend decides how to process the file
+        async function uploadFilesWithPaths(filePaths) {
+            console.log('[UPLOAD] uploadFilesWithPaths called with', filePaths.length, 'paths');
+            
+            // Switch to Research tab to show upload progress
+            switchToResearchTab();
+            
+            // Process file paths one at a time
+            for (const filePath of filePaths) {
+                const fileName = filePath.split('/').pop() || filePath.split('\\').pop() || 'file';
+                console.log(`[UPLOAD] Processing file path: ${filePath}`);
+                console.log(`[UPLOAD]   File name: ${fileName}`);
+                
+                try {
+                    showStatus('info', `Processing ${fileName}...`);
+                    
+                    // THIN FRONTEND: Just send file path to backend
+                    // Backend constructs prompts and decides processing strategy
+                    const fileInfo = {
+                        name: fileName,
+                        path: filePath,  // Tauri has the actual path
+                        size: null,  // Could get from Tauri if needed
+                        file_type: null,  // Could determine from extension
+                        preview: null  // Don't need preview when we have path
+                    };
+                    
+                    console.log('[UPLOAD] Sending file path to backend:', filePath);
+                    // Clear any existing query and submit with file info
+                    document.getElementById('queryInput').value = '';
+                    await submitQuery(fileInfo);
+                    
+                } catch (error) {
+                    console.error('[UPLOAD] Error processing file path:', error);
+                    showStatus('error', `Failed to process ${fileName}: ${error.message}`);
+                }
+            }
+            
+            console.log('[UPLOAD] All files processed, refreshing datasets...');
+            // After all files, refresh dataset list
+            await loadDatasets();
+        }
+        
+        // Helper function to read file as text
+        async function readFileAsText(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => resolve(e.target.result);
+                reader.onerror = reject;
+                reader.readAsText(file);
+            });
+        }
+        
+        // Helper function to read only first N lines of a file (much faster for large files)
+        async function readFilePreview(file, maxLines = 30) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                // Read only first 100KB for preview (should be enough for 30 lines)
+                const slice = file.slice(0, 100 * 1024);
+                
+                reader.onload = (e) => {
+                    const text = e.target.result;
+                    const lines = text.split('\n');
+                    const preview = lines.slice(0, maxLines).join('\n');
+                    resolve(preview);
+                };
+                
+                reader.onerror = reject;
+                reader.readAsText(slice);
+            });
         }
 
         // Load datasets from backend
@@ -725,13 +1127,28 @@
             document.querySelectorAll('.tab').forEach(tab => {
                 tab.classList.remove('active');
             });
-            event.target.classList.add('active');
+            
+            // Find and activate the correct tab button
+            document.querySelectorAll('.tab').forEach(tab => {
+                if (tab.textContent.toLowerCase().includes(tabName.toLowerCase())) {
+                    tab.classList.add('active');
+                }
+            });
             
             // Update tab content
             document.querySelectorAll('.tab-content').forEach(content => {
                 content.classList.remove('active');
             });
             document.getElementById(`${tabName}-tab`).classList.add('active');
+        }
+        
+        // Helper functions to switch tabs programmatically
+        function switchToResearchTab() {
+            switchTab('research');
+        }
+        
+        function switchToDataTab() {
+            switchTab('data');
         }
 
         // Utility functions

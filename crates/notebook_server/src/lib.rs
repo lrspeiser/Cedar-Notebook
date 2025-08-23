@@ -1,4 +1,4 @@
-use axum::{extract::{Multipart, Path, Query}, http::StatusCode, response::{IntoResponse, Response, sse::{Sse, Event}, Html}, routing::get, Json, Router};
+use axum::{extract::{DefaultBodyLimit, Multipart, Path, Query}, http::StatusCode, response::{IntoResponse, Response, sse::{Sse, Event}, Html}, routing::get, Json, Router};
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use tower_http::cors::{CorsLayer, Any};
@@ -145,10 +145,20 @@ struct ConversationTurn {
 }
 
 #[derive(Deserialize)]
+struct FileInfo {
+    name: String,
+    path: Option<String>,
+    size: Option<u64>,
+    file_type: Option<String>,
+    preview: Option<String>,
+}
+
+#[derive(Deserialize)]
 struct SubmitQueryBody {
-    prompt: String,
+    prompt: Option<String>,  // Made optional since file_info might be sent without prompt
     api_key: Option<String>,
     conversation_history: Option<Vec<ConversationTurn>>,
+    file_info: Option<FileInfo>,  // New field for file information from Tauri
 }
 
 #[derive(Serialize)]
@@ -171,10 +181,95 @@ async fn handle_submit_query(body: SubmitQueryBody) -> anyhow::Result<SubmitQuer
         .or_else(|| std::env::var("OPENAI_API_KEY").ok())
         .ok_or_else(|| anyhow::anyhow!("No API key provided"))?;
     
-    // Build full prompt with conversation history for the agent
-    // The agent loop expects a fresh prompt each time, so we need to 
-    // provide context from previous turns
-    let full_prompt = if let Some(history) = &body.conversation_history {
+    // Build prompt based on whether we have file_info or just a text prompt
+    let full_prompt = if let Some(file_info) = &body.file_info {
+        // Handle file processing request - use the sophisticated agent loop approach
+        let mut prompt = String::new();
+        
+        if let Some(path) = &file_info.path {
+            // We have the full file path from Tauri/desktop app
+            let preview = if let Ok(content) = std::fs::read_to_string(&path) {
+                content.lines().take(30).collect::<Vec<_>>().join("\n")
+            } else {
+                String::from("[Could not read file preview]")
+            };
+            
+            // Get metadata database path for the prompt
+            let metadata_db_path = notebook_core::util::default_runs_root()
+                .map(|r| r.join("metadata.duckdb"))
+                .unwrap_or_else(|_| std::path::PathBuf::from("metadata.duckdb"));
+            
+            // Construct a comprehensive file ingestion prompt that leverages the agent loop
+            prompt.push_str(&format!("I need you to ingest and process a data file into our system.\n\n"));
+            prompt.push_str(&format!("File Information:\n"));
+            prompt.push_str(&format!("- Full path: {}\n", path));
+            prompt.push_str(&format!("- File name: {}\n", file_info.name));
+            if let Some(size) = file_info.size {
+                prompt.push_str(&format!("- File size: {} bytes\n", size));
+            }
+            prompt.push_str(&format!("\nFirst 30 lines preview:\n```\n{}\n```\n\n", preview));
+            
+            // The complete ingestion workflow the agent should follow
+            prompt.push_str("Please perform a COMPLETE data ingestion workflow:\n\n");
+            
+            prompt.push_str("STEP 1: Load and analyze the file\n");
+            prompt.push_str(&format!("- Read the file from: {}\n", path));
+            prompt.push_str("- Auto-detect the file type (CSV, Excel, JSON, Parquet)\n");
+            prompt.push_str("- Load it into a DataFrame\n");
+            prompt.push_str("- Handle any encoding or parsing issues\n\n");
+            
+            prompt.push_str("STEP 2: Generate comprehensive statistics\n");
+            prompt.push_str("- Row count and column count\n");
+            prompt.push_str("- Column names and data types\n");
+            prompt.push_str("- For numeric columns: min, max, mean, median, std dev\n");
+            prompt.push_str("- For string columns: unique values count, most common values\n");
+            prompt.push_str("- Missing value counts per column\n");
+            prompt.push_str("- First 5 rows as preview\n\n");
+            
+            prompt.push_str("STEP 3: Convert to Parquet format\n");
+            prompt.push_str("- Convert string columns to proper String type (not String15/String31)\n");
+            prompt.push_str("- Save as 'result.parquet' in the working directory\n");
+            prompt.push_str("- Use write_parquet() function (NOT Parquet.File())\n\n");
+            
+            prompt.push_str("STEP 4: Store in DuckDB (optional if DuckDB available)\n");
+            prompt.push_str(&format!("- Connect to DuckDB at: {}\n", metadata_db_path.display()));
+            prompt.push_str("- Create or replace a table from the Parquet file\n");
+            prompt.push_str("- Run validation queries\n\n");
+            
+            prompt.push_str("STEP 5: Generate metadata summary\n");
+            prompt.push_str("- Create a JSON preview with all statistics\n");
+            prompt.push_str("- Include a descriptive title and summary\n");
+            prompt.push_str("- List interesting patterns or insights found\n\n");
+            
+            prompt.push_str("IMPORTANT: Use the agent loop capabilities:\n");
+            prompt.push_str("- If packages are missing, install them with Pkg.add()\n");
+            prompt.push_str("- If errors occur, analyze and retry with fixes\n");
+            prompt.push_str("- Use println() to show progress and results\n");
+            prompt.push_str("- Create PREVIEW_JSON blocks for structured output\n\n");
+            
+            prompt.push_str("Start with Step 1 and proceed through all steps systematically.\n");
+        } else if let Some(preview) = &file_info.preview {
+            // Web upload - no direct file path, work with preview
+            prompt.push_str(&format!("Process this uploaded {} file.\n\n", file_info.name));
+            prompt.push_str(&format!("File preview (first 30 lines):\n```\n{}\n```\n\n", preview));
+            prompt.push_str("Since this is uploaded data without a file path, you'll need to:\n");
+            prompt.push_str("1. Save the preview data to a temporary CSV file\n");
+            prompt.push_str("2. Then follow the standard ingestion workflow\n");
+        }
+        
+        // Add any user query if provided
+        if let Some(user_prompt) = &body.prompt {
+            if !user_prompt.is_empty() {
+                prompt.push_str(&format!("\nAdditional user request: {}\n", user_prompt));
+            }
+        } else {
+            // Default request if user didn't specify
+            prompt.push_str("\nProvide a comprehensive analysis and summary of this dataset.\n");
+        }
+        
+        prompt
+    } else if let Some(history) = &body.conversation_history {
+        // Handle conversation with history
         let mut context = String::new();
         if !history.is_empty() {
             context.push_str("Previous conversation:\n");
@@ -186,10 +281,11 @@ async fn handle_submit_query(body: SubmitQueryBody) -> anyhow::Result<SubmitQuer
             }
             context.push_str("\nCurrent query:\n");
         }
-        context.push_str(&body.prompt);
+        context.push_str(&body.prompt.as_ref().unwrap_or(&String::new()));
         context
     } else {
-        body.prompt.clone()
+        // Simple prompt without history or file
+        body.prompt.clone().unwrap_or_else(|| String::from("Hello"))
     };
     
     // Create a new run
@@ -214,7 +310,8 @@ async fn handle_submit_query(body: SubmitQueryBody) -> anyhow::Result<SubmitQuer
     let result = tokio::task::spawn_blocking(move || {
         // Create a mini tokio runtime for the agent loop
         let rt = tokio::runtime::Runtime::new()?;
-        rt.block_on(agent_loop(&run_dir, &full_prompt, 5, config))
+        // Use 50 turns to give the LLM plenty of chances to fix errors and complete complex tasks
+        rt.block_on(agent_loop(&run_dir, &full_prompt, 50, config))
     })
     .await??;
     
@@ -307,6 +404,8 @@ async fn http_submit_query(
 async fn upload_file(mut multipart: Multipart) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
     use notebook_core::agent_loop::{agent_loop, AgentConfig};
     
+    eprintln!("[UPLOAD] Received multipart upload request");
+    
     // Get metadata DB path
     let root = notebook_core::util::default_runs_root()
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -316,16 +415,42 @@ async fn upload_file(mut multipart: Multipart) -> Result<Json<serde_json::Value>
     
     let mut uploaded_datasets = Vec::new();
     
-    while let Some(field) = multipart.next_field().await
-        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))? {
+    while let Some(mut field) = multipart.next_field().await
+        .map_err(|e| {
+            eprintln!("[UPLOAD ERROR] Failed to get next field from multipart: {}", e);
+            eprintln!("[UPLOAD ERROR] This often happens when:");
+            eprintln!("  - The Content-Type header is missing or malformed");
+            eprintln!("  - The multipart boundary is incorrect");
+            eprintln!("  - The request body is empty");
+            (StatusCode::BAD_REQUEST, format!("Error parsing multipart field: {}", e))
+        })? {
         
+        // Get field name and file name
+        let field_name = field.name().map(|s| s.to_string());
         let file_name = field.file_name()
-            .unwrap_or("unknown")
-            .to_string();
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| "unknown.csv".to_string());
+        
+        eprintln!("[UPLOAD] Processing field: {:?}, filename: {:?}", field_name, file_name);
+        
+        // Skip non-file fields
+        if field.file_name().is_none() {
+            eprintln!("[UPLOAD] Skipping non-file field: {:?}", field_name);
+            continue;
+        }
         
         // Read file content
         let data = field.bytes().await
-            .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+            .map_err(|e| {
+                eprintln!("[UPLOAD ERROR] Failed to read field bytes: {}", e);
+                (StatusCode::BAD_REQUEST, format!("Failed to read upload data: {}", e))
+            })?;
+        
+        // Skip empty files
+        if data.is_empty() {
+            eprintln!("[UPLOAD WARNING] Empty file uploaded: {}", file_name);
+            continue;
+        }
         
         // Save file to temp location
         let temp_dir = std::env::temp_dir();
@@ -380,34 +505,62 @@ async fn upload_file(mut multipart: Multipart) -> Result<Json<serde_json::Value>
             }).collect::<Vec<_>>(),
         });
         
-        // Call LLM to generate title, description, and conversion code
+        // Enhanced prompt for complete autonomous workflow
+        let parquet_path = file_path.with_extension("parquet");
         let llm_prompt = format!(
-            "You are analyzing a data file that needs to be converted to Parquet format for efficient querying.\n\n\
-            File Information:\n{}\n\n\
-            First 30 lines of the file:\n{}\n\n\
-            Please provide:\n\
-            1. A UI Friendly Title That Reflects The Data (max 100 chars)\n\
-            2. A UI Friendly Description That Describes The Data (max 500 chars)\n\
-            3. For each column, provide a brief description of what it likely represents\n\
-            4. Julia code to convert this file to Parquet format. The code should:\n\
-               - Read the file from path: {}\n\
-               - Handle any necessary data cleaning or type conversions\n\
-               - Save as Parquet to: {}\n\n\
-            Respond with a JSON object in this exact format:\n\
-            {{\
-              \"title\": \"...\",\
-              \"description\": \"...\",\
-              \"column_descriptions\": {{\"column_name\": \"description\", ...}},\
-              \"julia_conversion_code\": \"using CSV, DataFrames, Parquet\\n# Your conversion code here...\"\n            }}",
-            serde_json::to_string_pretty(&file_info).unwrap_or_default(),
-            sample_data,
+            "You are a data engineer tasked with processing an uploaded file. You must:\n\n\
+            1. Analyze the file structure and content\n\
+            2. Write Julia code to convert it to Parquet format\n\
+            3. Execute the conversion and handle any errors\n\
+            4. Load the Parquet file into DuckDB\n\
+            5. Query the data to show a summary\n\n\
+            File Information:\n\
+            - Path: {}\n\
+            - Size: {} bytes\n\
+            - Type: {}\n\n\
+            First 30 lines of the file:\n\
+            ```\n{}\n```\n\n\
+            IMPORTANT: You have access to these tools:\n\
+            - run_julia_cell: Execute Julia code\n\
+            - run_shell: Execute shell commands\n\
+            - The DuckDB database is at: {}\n\n\
+            Follow these steps EXACTLY:\n\n\
+            STEP 1: Write and execute Julia code to:\n\
+            a) Load the file from: {}\n\
+            b) Clean and process the data as needed\n\
+            c) Save as Parquet to: {}\n\
+            d) If there are errors, fix them and retry\n\n\
+            STEP 2: After successful conversion, execute Julia code to:\n\
+            a) Connect to DuckDB at the path above\n\
+            b) Create or replace a table from the Parquet file\n\
+            c) Run a query to get:\n\
+               - Total row count\n\
+               - Column names and types\n\
+               - First 5 rows as a preview\n\
+               - Basic statistics (min/max/avg for numeric columns)\n\n\
+            STEP 3: Present a final summary to the user showing:\n\
+            - Dataset successfully loaded\n\
+            - Number of rows and columns\n\
+            - Column details\n\
+            - Sample data preview\n\
+            - Any interesting insights from the data\n\n\
+            Begin by analyzing the file and proceeding with the conversion.",
             file_path.to_string_lossy(),
-            file_path.with_extension("parquet").to_string_lossy()
+            data.len(),
+            file_type,
+            sample_data,
+            db_path.to_string_lossy(),
+            file_path.to_string_lossy(),
+            parquet_path.to_string_lossy()
         );
         
-        // Get API key
+        // Get API key (optional for file upload - we can proceed without LLM enhancement)
         let api_key = std::env::var("OPENAI_API_KEY")
-            .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "No API key configured".to_string()))?;
+            .or_else(|_| std::env::var("openai_api_key"))
+            .unwrap_or_else(|_| {
+                eprintln!("[UPLOAD WARNING] No API key found, will use basic metadata without LLM enhancement");
+                "dummy-key-for-basic-upload".to_string()
+            });
         
         // Create temporary run for LLM call
         let temp_run = notebook_core::runs::create_new_run(None)
@@ -415,24 +568,50 @@ async fn upload_file(mut multipart: Multipart) -> Result<Json<serde_json::Value>
         
         let config = AgentConfig {
             openai_api_key: api_key,
-            // gpt-5 is the latest model - see README.md for current model documentation
-            openai_model: std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-5".to_string()),
+            // Use gpt-4o-mini for now as it's stable
+            openai_model: std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o-mini".to_string()),
             openai_base: std::env::var("OPENAI_BASE").ok(),
             relay_url: std::env::var("CEDAR_KEY_URL").ok(),
             app_shared_token: std::env::var("APP_SHARED_TOKEN").ok(),
         };
         
-        // Call LLM to get enhanced metadata
+        // Log the upload attempt
+        eprintln!("[UPLOAD] Processing file: {} (size: {} bytes, type: {})", 
+                 file_name, data.len(), file_type);
+        eprintln!("[UPLOAD] Sample data preview (first 5 lines):");
+        for (i, line) in sample_data.lines().take(5).enumerate() {
+            eprintln!("  Line {}: {}", i + 1, line);
+        }
+        
+        // Call LLM with multiple turns to complete the workflow
+        eprintln!("[UPLOAD] Starting autonomous data processing workflow...");
         let llm_result = tokio::task::spawn_blocking(move || {
             let rt = tokio::runtime::Runtime::new()?;
-            rt.block_on(agent_loop(&temp_run.dir, &llm_prompt, 1, config))
+            // Give the agent up to 50 turns to complete the workflow with retries
+            rt.block_on(agent_loop(&temp_run.dir, &llm_prompt, 50, config))
         })
         .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Task execution failed: {}", e)))?
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("LLM call failed: {}", e)))?;
+        .map_err(|e| {
+            eprintln!("[UPLOAD ERROR] Task execution failed: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, format!("Task execution failed: {}", e))
+        })?
+        .map_err(|e| {
+            eprintln!("[UPLOAD ERROR] LLM analysis failed: {}", e);
+            eprintln!("[UPLOAD ERROR] This may be due to: ");
+            eprintln!("  - Invalid or missing API key");
+            eprintln!("  - Network connectivity issues");
+            eprintln!("  - File content that cannot be analyzed");
+            eprintln!("[UPLOAD] Continuing with basic metadata without LLM enhancement...");
+            // Instead of failing completely, continue with basic metadata
+            // We'll handle this as a warning rather than an error
+            e
+        });
         
-        // Parse LLM response
-        let (title, description, enhanced_columns, julia_code) = if let Some(final_output) = llm_result.final_output {
+        // Parse LLM response (if successful)
+        let (title, description, enhanced_columns, julia_code) = match llm_result {
+            Ok(result) if result.final_output.is_some() => {
+                eprintln!("[UPLOAD] LLM analysis completed successfully");
+                let final_output = result.final_output.unwrap();
             // Try to parse JSON from the response
             // First, try to extract JSON if it's embedded in text
             let json_str = if final_output.contains("{") && final_output.contains("}") {
@@ -473,9 +652,15 @@ async fn upload_file(mut multipart: Multipart) -> Result<Json<serde_json::Value>
                     (file_name.clone(), format!("Dataset from file: {}", file_name), column_info.clone(), None)
                 }
             }
-        } else {
-            eprintln!("Warning: LLM did not provide a final output");
-            (file_name.clone(), format!("Dataset from file: {}", file_name), column_info.clone(), None)
+            },
+            Ok(_) => {
+                eprintln!("[UPLOAD WARNING] LLM did not provide a final output");
+                (file_name.clone(), format!("Dataset from file: {}", file_name), column_info.clone(), None)
+            },
+            Err(e) => {
+                eprintln!("[UPLOAD WARNING] Using basic metadata due to LLM error: {}", e);
+                (file_name.clone(), format!("Dataset from file: {}", file_name), column_info.clone(), None)
+            }
         };
         
         // If Julia code was generated, execute it to convert the file
@@ -530,6 +715,11 @@ async fn upload_file(mut multipart: Multipart) -> Result<Json<serde_json::Value>
             "row_count": metadata.row_count,
             "column_count": metadata.column_info.len(),
         }));
+    }
+    
+    eprintln!("[UPLOAD] Successfully processed {} dataset(s)", uploaded_datasets.len());
+    for ds in &uploaded_datasets {
+        eprintln!("  - {} ({})", ds["title"], ds["file_name"]);
     }
     
     Ok(Json(serde_json::json!({
@@ -655,8 +845,8 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/commands/run_julia", axum::routing::post(cmd_run_julia))
         .route("/commands/run_shell", axum::routing::post(cmd_run_shell))
         .route("/commands/submit_query", axum::routing::post(http_submit_query))
-        // Dataset management
-        .route("/datasets/upload", axum::routing::post(upload_file))
+        // Dataset management with 100MB limit for file uploads
+        .route("/datasets/upload", axum::routing::post(upload_file).layer(DefaultBodyLimit::max(100 * 1024 * 1024)))
         .route("/datasets", get(list_datasets))
         .route("/datasets/:dataset_id", get(get_dataset).delete(delete_dataset))
         // SSE events

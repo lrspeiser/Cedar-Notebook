@@ -90,7 +90,7 @@ impl MetadataManager {
                 description TEXT NOT NULL,
                 row_count BIGINT,
                 sample_data TEXT NOT NULL,
-                uploaded_at TIMESTAMP NOT NULL
+                uploaded_at TEXT NOT NULL
             )",
             [],
         )?;

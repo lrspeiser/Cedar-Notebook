@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cedar Desktop - Native File Access</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            margin: 0;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+        .file-section {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            font-size: 1em;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+        }
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        textarea {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 1em;
+            resize: vertical;
+            min-height: 150px;
+            margin-bottom: 20px;
+            font-family: inherit;
+        }
+        .output-section {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+            min-height: 200px;
+        }
+        .file-info {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+        }
+        .success {
+            color: #2e7d32;
+            background: #e8f5e9;
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+        .error {
+            color: #c62828;
+            background: #ffebee;
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+        pre {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: 'Monaco', 'Menlo', monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌲 Cedar Desktop</h1>
+        <p class="subtitle">Native File Access with Full Path Support</p>
+
+        <div class="file-section">
+            <h3>Select Data File (Native Dialog)</h3>
+            <button class="btn" onclick="selectFileNative()">
+                Select File Using Tauri
+            </button>
+            <div id="fileInfo" style="display: none;" class="file-info">
+                <strong>Selected File:</strong> <span id="filePath"></span><br>
+                <strong>Size:</strong> <span id="fileSize"></span> bytes
+            </div>
+        </div>
+
+        <div>
+            <h3>Query</h3>
+            <textarea id="queryInput" placeholder="Enter your analysis query, e.g., 'Summarize this CSV data'"></textarea>
+            <button class="btn" onclick="submitQuery()">
+                Analyze with Full Path
+            </button>
+        </div>
+
+        <div class="output-section">
+            <h3>Results</h3>
+            <div id="output">Waiting for analysis...</div>
+        </div>
+
+        <div id="messages"></div>
+    </div>
+
+    <script type="module">
+        // Import Tauri API
+        const { invoke } = window.__TAURI__.tauri;
+        
+        let selectedFile = null;
+
+        // Make functions global so onclick can access them
+        window.selectFileNative = async function() {
+            try {
+                console.log('Calling Tauri select_file command...');
+                const fileInfo = await invoke('select_file');
+                
+                if (fileInfo) {
+                    selectedFile = fileInfo;
+                    document.getElementById('fileInfo').style.display = 'block';
+                    document.getElementById('filePath').textContent = fileInfo.path;
+                    document.getElementById('fileSize').textContent = fileInfo.size;
+                    showMessage('success', `File selected: ${fileInfo.name}`);
+                    console.log('File selected with full path:', fileInfo.path);
+                } else {
+                    showMessage('info', 'No file selected');
+                }
+            } catch (error) {
+                console.error('Error selecting file:', error);
+                showMessage('error', `Failed to select file: ${error}`);
+            }
+        }
+
+        window.submitQuery = async function() {
+            if (!selectedFile) {
+                showMessage('error', 'Please select a file first');
+                return;
+            }
+
+            const query = document.getElementById('queryInput').value || 'Analyze this data';
+            
+            try {
+                document.getElementById('output').innerHTML = '<div>Processing...</div>';
+                
+                // Build the prompt with the FULL FILE PATH
+                const prompt = `Please analyze the CSV file at the following path:
+${selectedFile.path}
+
+User request: ${query}
+
+Use Julia to:
+1. Read the CSV file from the EXACT path: ${selectedFile.path}
+2. Load it into a DataFrame
+3. Provide a comprehensive analysis including:
+   - Number of rows and columns
+   - Column names and types
+   - Basic statistics
+   - Any interesting patterns
+
+IMPORTANT: Use the full file path provided above when reading the file.`;
+
+                console.log('Sending to backend with full path:', selectedFile.path);
+                
+                // Send to backend
+                const response = await fetch('http://localhost:8080/commands/submit_query', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        prompt: prompt,
+                        file_info: {
+                            name: selectedFile.name,
+                            path: selectedFile.path,
+                            size: selectedFile.size
+                        }
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Server error: ${response.status}`);
+                }
+
+                const result = await response.json();
+                
+                // Display results
+                let output = '<div class="success">Analysis Complete!</div>';
+                
+                if (result.response) {
+                    output += `<h4>Response:</h4><p>${result.response}</p>`;
+                }
+                
+                if (result.julia_code) {
+                    output += `<h4>Julia Code:</h4><pre>${result.julia_code}</pre>`;
+                }
+                
+                if (result.execution_output) {
+                    output += `<h4>Execution Output:</h4><pre>${result.execution_output}</pre>`;
+                }
+                
+                document.getElementById('output').innerHTML = output;
+                showMessage('success', 'Analysis completed successfully!');
+                
+            } catch (error) {
+                console.error('Analysis error:', error);
+                document.getElementById('output').innerHTML = `<div class="error">Error: ${error}</div>`;
+                showMessage('error', `Analysis failed: ${error}`);
+            }
+        }
+
+        function showMessage(type, message) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = type;
+            msgDiv.textContent = message;
+            document.getElementById('messages').appendChild(msgDiv);
+            setTimeout(() => msgDiv.remove(), 5000);
+        }
+
+        // Test that Tauri is available
+        if (window.__TAURI__) {
+            console.log('✅ Tauri API is available');
+            showMessage('success', 'Tauri native file access ready');
+        } else {
+            console.error('❌ Tauri API not found - this must run in the Tauri app');
+            showMessage('error', 'This page must be run in the Tauri desktop app, not a web browser');
+        }
+    </script>
+</body>
+</html>

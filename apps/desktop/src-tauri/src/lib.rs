@@ -1,3 +1,79 @@
+use tauri::Manager;
+use tauri::menu::{Menu, MenuItemBuilder, SubmenuBuilder};
+use std::path::PathBuf;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Serialize, Deserialize)]
+struct FileInfo {
+    path: String,
+    name: String,
+    size: u64,
+}
+
+#[tauri::command]
+async fn select_file(app_handle: tauri::AppHandle) -> Result<Option<FileInfo>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    
+    // Use native file dialog to select a file
+    let file_handle = app_handle
+        .dialog()
+        .file()
+        .add_filter("Data Files", &["csv", "xlsx", "xls", "json", "parquet"])
+        .add_filter("All Files", &["*"])
+        .blocking_pick_file();
+    
+    if let Some(file_path) = file_handle {
+        let path = file_path.as_path().unwrap();
+        let metadata = std::fs::metadata(&path)
+            .map_err(|e| format!("Failed to read file metadata: {}", e))?;
+        
+        let file_name = path.file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown")
+            .to_string();
+        
+        Ok(Some(FileInfo {
+            path: path.to_string_lossy().to_string(),
+            name: file_name,
+            size: metadata.len(),
+        }))
+    } else {
+        Ok(None)
+    }
+}
+
+#[tauri::command]
+async fn process_file_at_path(file_path: String) -> Result<String, String> {
+    // Verify the file exists
+    let path = PathBuf::from(&file_path);
+    if !path.exists() {
+        return Err(format!("File does not exist: {}", file_path));
+    }
+    
+    // Get file metadata
+    let metadata = std::fs::metadata(&path)
+        .map_err(|e| format!("Failed to read file metadata: {}", e))?;
+    
+    // Read first few lines for preview
+    let preview = std::fs::read_to_string(&path)
+        .map(|content| {
+            content.lines()
+                .take(5)
+                .collect::<Vec<_>>()
+                .join("\n")
+        })
+        .unwrap_or_else(|_| "[Binary file or unreadable content]".to_string());
+    
+    // Pass the file path to the Julia/backend for processing
+    // For now, return info about the file
+    Ok(format!(
+        "File: {}\nSize: {} bytes\nPreview:\n{}",
+        file_path,
+        metadata.len(),
+        preview
+    ))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   // CRITICAL: Load environment variables for API key fetching from onrender server
@@ -5,7 +81,32 @@ pub fn run() {
   // DO NOT REMOVE: This enables fetching keys from cedar-notebook.onrender.com
   load_env_config();
   
+  // Start the backend server in a separate thread
+  std::thread::spawn(|| {
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    runtime.block_on(async {
+      println!("Starting embedded Cedar backend server...");
+      if let Err(e) = notebook_server::serve().await {
+        eprintln!("Backend server error: {}", e);
+      }
+    });
+  });
+  
+  // Give the backend a moment to start
+  std::thread::sleep(std::time::Duration::from_secs(2));
+  
+  // Ensure the app appears in the dock on macOS
+  #[cfg(target_os = "macos")]
+  {
+    use tauri::Manager;
+    std::thread::spawn(|| {
+      std::thread::sleep(std::time::Duration::from_millis(100));
+    });
+  }
+  
   tauri::Builder::default()
+    .plugin(tauri_plugin_dialog::init())
+    .invoke_handler(tauri::generate_handler![select_file, process_file_at_path])
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
@@ -14,6 +115,91 @@ pub fn run() {
             .build(),
         )?;
       }
+      
+      // Create menus in setup after app handle is available
+      let handle = app.handle();
+      
+      // Create custom menu items
+      let debug_console = MenuItemBuilder::new("Open Debug Console")
+        .id("debug_console")
+        .build(app)?;
+      let close_window = MenuItemBuilder::new("Close Window")
+        .id("close")
+        .build(app)?;
+      let quit_app = MenuItemBuilder::new("Quit Cedar")
+        .id("quit")
+        .accelerator("CmdOrCtrl+Q")
+        .build(app)?;
+      
+      // Cedar menu
+      let cedar_menu = SubmenuBuilder::new(handle, "Cedar")
+        .item(&debug_console)
+        .separator()
+        .item(&close_window)
+        .item(&quit_app)
+        .build()?;
+      
+      // Edit menu with native items
+      let edit_menu = SubmenuBuilder::new(handle, "Edit")
+        .undo()
+        .redo()
+        .separator()
+        .cut()
+        .copy()
+        .paste()
+        .select_all()
+        .build()?;
+      
+      // View menu
+      let view_menu = SubmenuBuilder::new(handle, "View")
+        .fullscreen()
+        .build()?;
+      
+      // Window menu
+      let window_menu = SubmenuBuilder::new(handle, "Window")
+        .minimize()
+        .build()?;
+      
+      // Build and set the app menu
+      let menu = Menu::with_items(
+        handle,
+        &[
+          &cedar_menu,
+          &edit_menu,
+          &view_menu,
+          &window_menu,
+        ],
+      )?;
+      
+      app.set_menu(menu)?;
+      
+      // Ensure the window is visible and focused
+      if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.set_focus();
+      }
+      
+      // Set up menu event listener
+      app.on_menu_event(move |_app, event| {
+        match event.id().as_ref() {
+          "debug_console" => {
+            // Toggle debug console in the app
+            if let Some(window) = _app.get_webview_window("main") {
+              let _ = window.eval("window.toggleDebugConsole()");
+            }
+          }
+          "close" => {
+            if let Some(window) = _app.get_webview_window("main") {
+              let _ = window.close();
+            }
+          }
+          "quit" => {
+            std::process::exit(0);
+          }
+          _ => {}
+        }
+      });
+      
       Ok(())
     })
     .run(tauri::generate_context!())

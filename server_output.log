@@ -1,0 +1,203 @@
+warning: unused import: `params`
+ --> crates/notebook_core/src/duckdb_metadata.rs:2:26
+  |
+2 | use duckdb::{Connection, params};
+  |                          ^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: `notebook_core` (lib) generated 1 warning (run `cargo fix --lib -p notebook_core` to apply 1 suggestion)
+   Compiling notebook_server v0.0.1 (/Users/leonardspeiser/Projects/cedarcli/crates/notebook_server)
+warning: unused variable: `file_info`
+   --> crates/notebook_server/src/lib.rs:400:13
+    |
+400 |         let file_info = serde_json::json!({
+    |             ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_file_info`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/notebook_server/src/lib.rs:322:20
+    |
+322 |     while let Some(mut field) = multipart.next_field().await
+    |                    ----^^^^^
+    |                    |
+    |                    help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: `notebook_server` (lib) generated 2 warnings (run `cargo fix --lib -p notebook_server` to apply 1 suggestion)
+warning: unused imports: `Any` and `CorsLayer`
+ --> crates/notebook_server/src/main.rs:3:24
+  |
+3 | use tower_http::cors::{CorsLayer, Any};
+  |                        ^^^^^^^^^  ^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused imports: `Router` and `routing::get`
+ --> crates/notebook_server/src/main.rs:4:109
+  |
+4 | use axum::{extract::{Path, Query}, http::StatusCode, response::{IntoResponse, Response, sse::{Sse, Event}}, routing::get, Json, Router};
+  |                                                                                                             ^^^^^^^^^^^^        ^^^^^^
+
+warning: unused import: `std::net::SocketAddr`
+ --> crates/notebook_server/src/main.rs:6:5
+  |
+6 | use std::net::SocketAddr;
+  |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `health` is never used
+ --> crates/notebook_server/src/main.rs:9:10
+  |
+9 | async fn health() -> &'static str { "ok" }
+  |          ^^^^^^
+  |
+  = note: `#[warn(dead_code)]` on by default
+
+warning: field `limit` is never read
+  --> crates/notebook_server/src/main.rs:12:25
+   |
+12 | struct ListRunsParams { limit: Option<usize> }
+   |        --------------   ^^^^^
+   |        |
+   |        field in this struct
+
+warning: function `list_runs` is never used
+  --> crates/notebook_server/src/main.rs:14:10
+   |
+14 | async fn list_runs(Query(q): Query<ListRunsParams>) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+   |          ^^^^^^^^^
+
+warning: function `list_cards` is never used
+  --> crates/notebook_server/src/main.rs:24:10
+   |
+24 | async fn list_cards(Path(run_id): Path<String>) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+   |          ^^^^^^^^^^
+
+warning: function `download_artifact` is never used
+  --> crates/notebook_server/src/main.rs:43:10
+   |
+43 | async fn download_artifact(Path((run_id, file)): Path<(String, String)>) -> Result<Response, (StatusCode, String)> {
+   |          ^^^^^^^^^^^^^^^^^
+
+warning: field `code` is never read
+  --> crates/notebook_server/src/main.rs:62:23
+   |
+62 | struct RunJuliaBody { code: String }
+   |        ------------   ^^^^
+   |        |
+   |        field in this struct
+
+warning: function `cmd_run_julia` is never used
+  --> crates/notebook_server/src/main.rs:64:10
+   |
+64 | async fn cmd_run_julia(Json(body): Json<RunJuliaBody>) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+   |          ^^^^^^^^^^^^^
+
+warning: fields `cmd`, `cwd`, and `timeout_secs` are never read
+  --> crates/notebook_server/src/main.rs:76:23
+   |
+76 | struct RunShellBody { cmd: String, cwd: Option<String>, timeout_secs: Option<u64> }
+   |        ------------   ^^^          ^^^                  ^^^^^^^^^^^^
+   |        |
+   |        fields in this struct
+
+warning: function `cmd_run_shell` is never used
+  --> crates/notebook_server/src/main.rs:78:10
+   |
+78 | async fn cmd_run_shell(Json(body): Json<RunShellBody>) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+   |          ^^^^^^^^^^^^^
+
+warning: function `sse_run_events` is never used
+  --> crates/notebook_server/src/main.rs:89:10
+   |
+89 | async fn sse_run_events(axum::extract::Path(_run_id): axum::extract::Path<String>) -> Sse<impl futures::Stream<Item = Result<Event, std::...
+   |          ^^^^^^^^^^^^^^
+
+warning: function `http_submit_query` is never used
+   --> crates/notebook_server/src/main.rs:355:10
+    |
+355 | async fn http_submit_query(
+    |          ^^^^^^^^^^^^^^^^^
+
+warning: `notebook_server` (bin "notebook_server") generated 14 warnings (run `cargo fix --bin "notebook_server"` to apply 3 suggestions)
+    Finished `release` profile [optimized] target(s) in 6.41s
+     Running `target/release/notebook_server`
+✅ Cedar server running on http://localhost:8080
+Calculating 2 + 2.
+[2m2025-08-23T06:18:23.800453Z[0m [32m INFO[0m [1magent_loop[0m[1m{[0m[3mrun_id[0m[2m=[0m6d7de113-6e7d-4884-89cd-ff77fee6f780 [3muser_prompt[0m[2m=[0mWhat is 2+2?[1m}[0m[2m:[0m[1mrun_julia_cell[0m[1m{[0m[3mrun_dir[0m[2m=[0m/Users/leonardspeiser/Library/Application Support/com.CedarAI.CedarAI/runs/6d7de113-6e7d-4884-89cd-ff77fee6f780[1m}[0m[2m:[0m [2mnotebook_core::executors::julia[0m[2m:[0m spawning julia
+[2m2025-08-23T06:18:24.375053Z[0m [32m INFO[0m [2mnotebook_core::executors::julia[0m[2m:[0m Result: 4 [3mtarget[0m[2m=[0m"exec::stdout"
+The result of 2 + 2 is 4.
+Calculating the sum of 2 and 2.
+[2m2025-08-23T06:18:35.761411Z[0m [32m INFO[0m [1magent_loop[0m[1m{[0m[3mrun_id[0m[2m=[0m6bfb41eb-653e-447f-aaa7-43f08821375c [3muser_prompt[0m[2m=[0mWhat is 2+2?[1m}[0m[2m:[0m[1mrun_julia_cell[0m[1m{[0m[3mrun_dir[0m[2m=[0m/Users/leonardspeiser/Library/Application Support/com.CedarAI.CedarAI/runs/6bfb41eb-653e-447f-aaa7-43f08821375c[1m}[0m[2m:[0m [2mnotebook_core::executors::julia[0m[2m:[0m spawning julia
+[2m2025-08-23T06:18:35.947386Z[0m [32m INFO[0m [2mnotebook_core::executors::julia[0m[2m:[0m Result: 4 [3mtarget[0m[2m=[0m"exec::stdout"
+The result of 2 + 2 is 4.
+I'll read the CSV file and show you a summary of its contents.
+[2m2025-08-23T06:18:38.074367Z[0m [32m INFO[0m [1magent_loop[0m[1m{[0m[3mrun_id[0m[2m=[0m1c53e433-e0ad-42c0-a06b-5de49422b229 [3muser_prompt[0m[2m=[0mProcess the file named "test_data_backend.csv" that I just selected[1m}[0m[2m:[0m[1mrun_julia_cell[0m[1m{[0m[3mrun_dir[0m[2m=[0m/Users/leonardspeiser/Library/Application Support/com.CedarAI.CedarAI/runs/1c53e433-e0ad-42c0-a06b-5de49422b229[1m}[0m[2m:[0m [2mnotebook_core::executors::julia[0m[2m:[0m spawning julia
+[2m2025-08-23T06:18:40.140787Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m ERROR: LoadError: ArgumentError: "test_data_backend.csv" is not a valid file or doesn't exist [3mtarget[0m[2m=[0m"exec::stderr"
+[2m2025-08-23T06:18:40.141003Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m Stacktrace: [3mtarget[0m[2m=[0m"exec::stderr"
+[2m2025-08-23T06:18:40.188312Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m  [1] CSV.Context(source::CSV.Arg, header::CSV.Arg, normalizenames::CSV.Arg, datarow::CSV.Arg, skipto::CSV.Arg, footerskip::CSV.Arg, transpose::CSV.Arg, comment::CSV.Arg, ignoreemptyrows::CSV.Arg, ignoreemptylines::CSV.Arg, select::CSV.Arg, drop::CSV.Arg, limit::CSV.Arg, buffer_in_memory::CSV.Arg, threaded::CSV.Arg, ntasks::CSV.Arg, tasks::CSV.Arg, rows_to_check::CSV.Arg, lines_to_check::CSV.Arg, missingstrings::CSV.Arg, missingstring::CSV.Arg, delim::CSV.Arg, ignorerepeated::CSV.Arg, quoted::CSV.Arg, quotechar::CSV.Arg, openquotechar::CSV.Arg, closequotechar::CSV.Arg, escapechar::CSV.Arg, dateformat::CSV.Arg, dateformats::CSV.Arg, decimal::CSV.Arg, groupmark::CSV.Arg, truestrings::CSV.Arg, falsestrings::CSV.Arg, stripwhitespace::CSV.Arg, type::CSV.Arg, types::CSV.Arg, typemap::CSV.Arg, pool::CSV.Arg, downcast::CSV.Arg, lazystrings::CSV.Arg, stringtype::CSV.Arg, strict::CSV.Arg, silencewarnings::CSV.Arg, maxwarnings::CSV.Arg, debug::CSV.Arg, parsingdebug::CSV.Arg, validate::CSV.Arg, streaming::CSV.Arg) [3mtarget[0m[2m=[0m"exec::stderr"
+[2m2025-08-23T06:18:40.188737Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m    @ CSV ~/Projects/cedarcli/apps/cedar-bundle/resources/julia_env/depot/packages/CSV/XLcqT/src/context.jl:314 [3mtarget[0m[2m=[0m"exec::stderr"
+[2m2025-08-23T06:18:40.189072Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m  [2] #File#32 [3mtarget[0m[2m=[0m"exec::stderr"
+[2m2025-08-23T06:18:40.189235Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m    @ ~/Projects/cedarcli/apps/cedar-bundle/resources/julia_env/depot/packages/CSV/XLcqT/src/file.jl:222 [inlined] [3mtarget[0m[2m=[0m"exec::stderr"
+[2m2025-08-23T06:18:40.189401Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m  [3] CSV.File(source::String) [3mtarget[0m[2m=[0m"exec::stderr"
+[2m2025-08-23T06:18:40.189659Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m    @ CSV ~/Projects/cedarcli/apps/cedar-bundle/resources/julia_env/depot/packages/CSV/XLcqT/src/file.jl:162 [3mtarget[0m[2m=[0m"exec::stderr"
+[2m2025-08-23T06:18:40.190948Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m  [4] read(source::String, sink::Type; copycols::Bool, kwargs::@Kwargs{}) [3mtarget[0m[2m=[0m"exec::stderr"
+[2m2025-08-23T06:18:40.191176Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m    @ CSV ~/Projects/cedarcli/apps/cedar-bundle/resources/julia_env/depot/packages/CSV/XLcqT/src/CSV.jl:117 [3mtarget[0m[2m=[0m"exec::stderr"
+[2m2025-08-23T06:18:40.191333Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m  [5] read(source::String, sink::Type) [3mtarget[0m[2m=[0m"exec::stderr"
+[2m2025-08-23T06:18:40.191540Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m    @ CSV ~/Projects/cedarcli/apps/cedar-bundle/resources/julia_env/depot/packages/CSV/XLcqT/src/CSV.jl:113 [3mtarget[0m[2m=[0m"exec::stderr"
+[2m2025-08-23T06:18:40.191679Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m  [6] top-level scope [3mtarget[0m[2m=[0m"exec::stderr"
+[2m2025-08-23T06:18:40.192156Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m    @ ~/Library/Application Support/com.CedarAI.CedarAI/runs/1c53e433-e0ad-42c0-a06b-5de49422b229/cell.jl:1 [3mtarget[0m[2m=[0m"exec::stderr"
+[2m2025-08-23T06:18:40.192182Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m in expression starting at /Users/leonardspeiser/Library/Application Support/com.CedarAI.CedarAI/runs/1c53e433-e0ad-42c0-a06b-5de49422b229/cell.jl:1 [3mtarget[0m[2m=[0m"exec::stderr"
+Cedar asks: Could you please confirm the correct file path for the 'test_data_backend.csv' file or provide the appropriate file to process?
+Generating a 10x10 matrix of random numbers and calculating the mean, median, and standard deviation.
+[2m2025-08-23T06:18:44.014449Z[0m [32m INFO[0m [1magent_loop[0m[1m{[0m[3mrun_id[0m[2m=[0ma0adf04c-94e9-4d43-9c44-aceba8576ac1 [3muser_prompt[0m[2m=[0mCreate a Julia script that generates a 10x10 matrix of random numbers between 1 and 100, then calculate the mean, median, and standard deviation[1m}[0m[2m:[0m[1mrun_julia_cell[0m[1m{[0m[3mrun_dir[0m[2m=[0m/Users/leonardspeiser/Library/Application Support/com.CedarAI.CedarAI/runs/a0adf04c-94e9-4d43-9c44-aceba8576ac1[1m}[0m[2m:[0m [2mnotebook_core::executors::julia[0m[2m:[0m spawning julia
+[2m2025-08-23T06:18:44.458042Z[0m [32m INFO[0m [2mnotebook_core::executors::julia[0m[2m:[0m Result: Mean: 52.4, Median: 53.5, Std Dev: 26.760441179495004 [3mtarget[0m[2m=[0m"exec::stdout"
+Mean: 52.4, Median: 53.5, Std Dev: 26.760441179495004
+Calculating the result of 2 + 2.
+[2m2025-08-23T06:26:46.466988Z[0m [32m INFO[0m [1magent_loop[0m[1m{[0m[3mrun_id[0m[2m=[0mb243491f-c271-4a32-ba32-20683874d2d2 [3muser_prompt[0m[2m=[0mwhat is 2+2[1m}[0m[2m:[0m[1mrun_julia_cell[0m[1m{[0m[3mrun_dir[0m[2m=[0m/Users/leonardspeiser/Library/Application Support/com.CedarAI.CedarAI/runs/b243491f-c271-4a32-ba32-20683874d2d2[1m}[0m[2m:[0m [2mnotebook_core::executors::julia[0m[2m:[0m spawning julia
+[2m2025-08-23T06:26:47.159065Z[0m [32m INFO[0m [2mnotebook_core::executors::julia[0m[2m:[0m Result: 4 [3mtarget[0m[2m=[0m"exec::stdout"
+The result of 2 + 2 is 4.
+Reading the CSV file and summarizing its content.
+[2m2025-08-23T06:27:01.744761Z[0m [32m INFO[0m [1magent_loop[0m[1m{[0m[3mrun_id[0m[2m=[0mb453b75e-f0e0-445f-b7c2-123e77a81055 [3muser_prompt[0m[2m=[0mProcess the file named "raw_L180-210.csv" that I just selected[1m}[0m[2m:[0m[1mrun_julia_cell[0m[1m{[0m[3mrun_dir[0m[2m=[0m/Users/leonardspeiser/Library/Application Support/com.CedarAI.CedarAI/runs/b453b75e-f0e0-445f-b7c2-123e77a81055[1m}[0m[2m:[0m [2mnotebook_core::executors::julia[0m[2m:[0m spawning julia
+[2m2025-08-23T06:27:04.084106Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m ERROR: LoadError: ArgumentError: "raw_L180-210.csv" is not a valid file or doesn't exist [3mtarget[0m[2m=[0m"exec::stderr"
+[2m2025-08-23T06:27:04.084139Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m Stacktrace: [3mtarget[0m[2m=[0m"exec::stderr"
+[2m2025-08-23T06:27:04.136501Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m  [1] CSV.Context(source::CSV.Arg, header::CSV.Arg, normalizenames::CSV.Arg, datarow::CSV.Arg, skipto::CSV.Arg, footerskip::CSV.Arg, transpose::CSV.Arg, comment::CSV.Arg, ignoreemptyrows::CSV.Arg, ignoreemptylines::CSV.Arg, select::CSV.Arg, drop::CSV.Arg, limit::CSV.Arg, buffer_in_memory::CSV.Arg, threaded::CSV.Arg, ntasks::CSV.Arg, tasks::CSV.Arg, rows_to_check::CSV.Arg, lines_to_check::CSV.Arg, missingstrings::CSV.Arg, missingstring::CSV.Arg, delim::CSV.Arg, ignorerepeated::CSV.Arg, quoted::CSV.Arg, quotechar::CSV.Arg, openquotechar::CSV.Arg, closequotechar::CSV.Arg, escapechar::CSV.Arg, dateformat::CSV.Arg, dateformats::CSV.Arg, decimal::CSV.Arg, groupmark::CSV.Arg, truestrings::CSV.Arg, falsestrings::CSV.Arg, stripwhitespace::CSV.Arg, type::CSV.Arg, types::CSV.Arg, typemap::CSV.Arg, pool::CSV.Arg, downcast::CSV.Arg, lazystrings::CSV.Arg, stringtype::CSV.Arg, strict::CSV.Arg, silencewarnings::CSV.Arg, maxwarnings::CSV.Arg, debug::CSV.Arg, parsingdebug::CSV.Arg, validate::CSV.Arg, streaming::CSV.Arg) [3mtarget[0m[2m=[0m"exec::stderr"
+[2m2025-08-23T06:27:04.136954Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m    @ CSV ~/Projects/cedarcli/apps/cedar-bundle/resources/julia_env/depot/packages/CSV/XLcqT/src/context.jl:314 [3mtarget[0m[2m=[0m"exec::stderr"
+[2m2025-08-23T06:27:04.137133Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m  [2] #File#32 [3mtarget[0m[2m=[0m"exec::stderr"
+[2m2025-08-23T06:27:04.137300Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m    @ ~/Projects/cedarcli/apps/cedar-bundle/resources/julia_env/depot/packages/CSV/XLcqT/src/file.jl:222 [inlined] [3mtarget[0m[2m=[0m"exec::stderr"
+[2m2025-08-23T06:27:04.137464Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m  [3] CSV.File(source::String) [3mtarget[0m[2m=[0m"exec::stderr"
+[2m2025-08-23T06:27:04.137665Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m    @ CSV ~/Projects/cedarcli/apps/cedar-bundle/resources/julia_env/depot/packages/CSV/XLcqT/src/file.jl:162 [3mtarget[0m[2m=[0m"exec::stderr"
+[2m2025-08-23T06:27:04.138825Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m  [4] read(source::String, sink::Type; copycols::Bool, kwargs::@Kwargs{}) [3mtarget[0m[2m=[0m"exec::stderr"
+[2m2025-08-23T06:27:04.139033Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m    @ CSV ~/Projects/cedarcli/apps/cedar-bundle/resources/julia_env/depot/packages/CSV/XLcqT/src/CSV.jl:117 [3mtarget[0m[2m=[0m"exec::stderr"
+[2m2025-08-23T06:27:04.139186Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m  [5] read(source::String, sink::Type) [3mtarget[0m[2m=[0m"exec::stderr"
+[2m2025-08-23T06:27:04.139388Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m    @ CSV ~/Projects/cedarcli/apps/cedar-bundle/resources/julia_env/depot/packages/CSV/XLcqT/src/CSV.jl:113 [3mtarget[0m[2m=[0m"exec::stderr"
+[2m2025-08-23T06:27:04.139524Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m  [6] top-level scope [3mtarget[0m[2m=[0m"exec::stderr"
+[2m2025-08-23T06:27:04.139981Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m    @ ~/Library/Application Support/com.CedarAI.CedarAI/runs/b453b75e-f0e0-445f-b7c2-123e77a81055/cell.jl:3 [3mtarget[0m[2m=[0m"exec::stderr"
+[2m2025-08-23T06:27:04.140012Z[0m [33m WARN[0m [2mnotebook_core::executors::julia[0m[2m:[0m in expression starting at /Users/leonardspeiser/Library/Application Support/com.CedarAI.CedarAI/runs/b453b75e-f0e0-445f-b7c2-123e77a81055/cell.jl:3 [3mtarget[0m[2m=[0m"exec::stderr"
+Cedar asks: It seems the file "raw_L180-210.csv" is not found. Could you confirm the file name or check if it was uploaded correctly?
+Loading the CSV file and summarizing its content.
+[2m2025-08-23T06:37:27.258624Z[0m [32m INFO[0m [1magent_loop[0m[1m{[0m[3mrun_id[0m[2m=[0m5c3e5983-6840-4bec-a078-fcfecbd27098 [3muser_prompt[0m[2m=[0mPlease analyze the CSV file located at: /Users/leonardspeiser/Desktop/Backup Slices/raw_L180-210.csvSummarize this backup slice dataUse Julia to:1. Read the CSV file from the exact path: /Users/leonardspeiser/Desktop/Backup Slices/raw_L180-210.csv2. Load it into a DataFrame3. Provide a summary including:   - Number of rows and columns   - Column names and types   - Basic statistics   - Any interesting patterns or insights[1m}[0m[2m:[0m[1mrun_julia_cell[0m[1m{[0m[3mrun_dir[0m[2m=[0m/Users/leonardspeiser/Library/Application Support/com.CedarAI.CedarAI/runs/5c3e5983-6840-4bec-a078-fcfecbd27098[1m}[0m[2m:[0m [2mnotebook_core::executors::julia[0m[2m:[0m spawning julia
+[2m2025-08-23T06:37:29.747073Z[0m [32m INFO[0m [2mnotebook_core::executors::julia[0m[2m:[0m Result: 15×7 DataFrame [3mtarget[0m[2m=[0m"exec::stdout"
+[2m2025-08-23T06:37:29.747114Z[0m [32m INFO[0m [2mnotebook_core::executors::julia[0m[2m:[0m  Row │ variable               mean          min                           median        max                         nmissing  eltype [3mtarget[0m[2m=[0m"exec::stdout"
+[2m2025-08-23T06:37:29.747121Z[0m [32m INFO[0m [2mnotebook_core::executors::julia[0m[2m:[0m      │ Symbol                 Float64       Real                          Float64       Real                        Int64     DataType [3mtarget[0m[2m=[0m"exec::stdout"
+[2m2025-08-23T06:37:29.747126Z[0m [32m INFO[0m [2mnotebook_core::executors::julia[0m[2m:[0m ─────┼───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── [3mtarget[0m[2m=[0m"exec::stdout"
+[2m2025-08-23T06:37:29.747132Z[0m [32m INFO[0m [2mnotebook_core::executors::julia[0m[2m:[0m    1 │ source_id                3.32877e18  3118565858020954240             3.35518e18  3449938287309051008                0  Int64 [3mtarget[0m[2m=[0m"exec::stdout"
+[2m2025-08-23T06:37:29.747136Z[0m [32m INFO[0m [2mnotebook_core::executors::julia[0m[2m:[0m    2 │ ra                      95.0838                       77.4163       95.166                       110.458            0  Float64 [3mtarget[0m[2m=[0m"exec::stdout"
+[2m2025-08-23T06:37:29.747139Z[0m [32m INFO[0m [2mnotebook_core::executors::julia[0m[2m:[0m    3 │ dec                     15.7003                       -1.81952      15.6549                       33.2493           0  Float64 [3mtarget[0m[2m=[0m"exec::stdout"
+[2m2025-08-23T06:37:29.747158Z[0m [32m INFO[0m [2mnotebook_core::executors::julia[0m[2m:[0m    4 │ parallax                 2.61411                       0.17564       1.58745                     172.676            0  Float64 [3mtarget[0m[2m=[0m"exec::stdout"
+[2m2025-08-23T06:37:29.747160Z[0m [32m INFO[0m [2mnotebook_core::executors::julia[0m[2m:[0m    5 │ parallax_error           0.0213304                     0.0113845     0.0193134                     0.115816         0  Float64 [3mtarget[0m[2m=[0m"exec::stdout"
+[2m2025-08-23T06:37:29.747163Z[0m [32m INFO[0m [2mnotebook_core::executors::julia[0m[2m:[0m    6 │ pmra                     0.160009                   -764.414        -0.0757352                  1997.34             0  Float64 [3mtarget[0m[2m=[0m"exec::stdout"
+[2m2025-08-23T06:37:29.747165Z[0m [32m INFO[0m [2mnotebook_core::executors::julia[0m[2m:[0m    7 │ pmra_error               0.0226949                     0.0120253     0.0206107                     0.130311         0  Float64 [3mtarget[0m[2m=[0m"exec::stdout"
+[2m2025-08-23T06:37:29.747168Z[0m [32m INFO[0m [2mnotebook_core::executors::julia[0m[2m:[0m    8 │ pmdec                   -9.5447                    -1569.35         -4.92693                     337.883            0  Float64 [3mtarget[0m[2m=[0m"exec::stdout"
+[2m2025-08-23T06:37:29.747170Z[0m [32m INFO[0m [2mnotebook_core::executors::julia[0m[2m:[0m    9 │ pmdec_error              0.0175837                     0.00866621    0.0159613                     0.139782         0  Float64 [3mtarget[0m[2m=[0m"exec::stdout"
+[2m2025-08-23T06:37:29.747172Z[0m [32m INFO[0m [2mnotebook_core::executors::julia[0m[2m:[0m   10 │ radial_velocity         17.6969                     -147.661        17.1413                      316.379            0  Float64 [3mtarget[0m[2m=[0m"exec::stdout"
+[2m2025-08-23T06:37:29.747174Z[0m [32m INFO[0m [2mnotebook_core::executors::julia[0m[2m:[0m   11 │ radial_velocity_error    0.652831                      0.11307       0.23018                       4.99528          0  Float64 [3mtarget[0m[2m=[0m"exec::stdout"
+[2m2025-08-23T06:37:29.747177Z[0m [32m INFO[0m [2mnotebook_core::executors::julia[0m[2m:[0m   12 │ ruwe                     1.02571                       0.72575       1.02657                       1.19989          0  Float64 [3mtarget[0m[2m=[0m"exec::stdout"
+[2m2025-08-23T06:37:29.747179Z[0m [32m INFO[0m [2mnotebook_core::executors::julia[0m[2m:[0m   13 │ phot_g_mean_mag          9.55316                       4.43791       9.81965                      10.5216           0  Float64 [3mtarget[0m[2m=[0m"exec::stdout"
+[2m2025-08-23T06:37:29.747181Z[0m [32m INFO[0m [2mnotebook_core::executors::julia[0m[2m:[0m   14 │ b                        0.539894                     -9.99692       0.656312                      9.9987           0  Float64 [3mtarget[0m[2m=[0m"exec::stdout"
+[2m2025-08-23T06:37:29.747184Z[0m [32m INFO[0m [2mnotebook_core::executors::julia[0m[2m:[0m   15 │ l                      195.411                       180.002       195.5                         209.999            0  Float64 [3mtarget[0m[2m=[0m"exec::stdout"
+[2m2025-08-23T06:37:29.759518Z[0m [32m INFO[0m [2mnotebook_core::executors::julia[0m[2m:[0m Number of rows: 12000 [3mtarget[0m[2m=[0m"exec::stdout"
+[2m2025-08-23T06:37:29.759741Z[0m [32m INFO[0m [2mnotebook_core::executors::julia[0m[2m:[0m Number of columns: 15 [3mtarget[0m[2m=[0m"exec::stdout"
+[2m2025-08-23T06:37:30.056880Z[0m [32m INFO[0m [2mnotebook_core::executors::julia[0m[2m:[0m Column names and types: ["source_id", "ra", "dec", "parallax", "parallax_error", "pmra", "pmra_error", "pmdec", "pmdec_error", "radial_velocity", "radial_velocity_error", "ruwe", "phot_g_mean_mag", "b", "l"]DataType[Int64, Float64, Float64, Float64, Float64, Float64, Float64, Float64, Float64, Float64, Float64, Float64, Float64, Float64, Float64] [3mtarget[0m[2m=[0m"exec::stdout"

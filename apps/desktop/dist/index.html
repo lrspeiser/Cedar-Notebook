@@ -687,7 +687,7 @@
             
             try {
                 // Add current query to results immediately
-                addResultCard('pending', query || 'Processing file...', null);
+                const cardId = addResultCard('pending', query || 'Processing file...', null);
                 
                 // THIN FRONTEND: Only send user input and file metadata
                 // Backend handles ALL logic about what to do with it
@@ -708,6 +708,11 @@
                 }
                 
                 const result = await response.json();
+                
+                // Set up SSE for streaming updates if we have a run_id
+                if (result.run_id) {
+                    setupSSEForRun(result.run_id, cardId);
+                }
                 
                 // Update the result card with backend response
                 updateResultCard(result);
@@ -1070,9 +1075,24 @@
                 if (response.ok) {
                     datasets = await response.json();
                     renderDatasets();
+                    
+                    // Log dataset status for debugging
+                    if (datasets.length === 0) {
+                        console.log('[DATASETS] No datasets found (this is normal on first run)');
+                    } else {
+                        console.log(`[DATASETS] Loaded ${datasets.length} datasets`);
+                    }
+                } else {
+                    // It's OK if datasets endpoint returns 404 or empty
+                    console.log('[DATASETS] Datasets endpoint returned:', response.status);
+                    datasets = [];
+                    renderDatasets();
                 }
             } catch (error) {
-                console.error('Failed to load datasets:', error);
+                // Not a critical error - datasets might not be available yet
+                console.log('[DATASETS] Could not load datasets (this is normal if backend just started):', error.message);
+                datasets = [];
+                renderDatasets();
             }
         }
 
@@ -1215,6 +1235,65 @@
             });
         }
 
+        // Setup SSE for streaming updates from backend
+        function setupSSEForRun(runId, cardId) {
+            const eventSource = new EventSource(`${API_URL}/runs/${runId}/events`);
+            
+            eventSource.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    console.log('[SSE] Received update:', data);
+                    
+                    // Update the card with streaming data
+                    const card = document.getElementById(cardId);
+                    if (card) {
+                        // Find or create a streaming updates section
+                        let streamSection = card.querySelector('.streaming-updates');
+                        if (!streamSection) {
+                            // Remove spinner if present
+                            const spinner = card.querySelector('.spinner');
+                            if (spinner) spinner.remove();
+                            
+                            // Add streaming section
+                            streamSection = document.createElement('div');
+                            streamSection.className = 'streaming-updates';
+                            streamSection.style.cssText = 'margin-top: 10px; padding: 10px; background: #f0f0f0; border-radius: 4px; font-size: 13px;';
+                            card.appendChild(streamSection);
+                        }
+                        
+                        // Update with latest message
+                        if (data.type === 'status') {
+                            streamSection.innerHTML = `<strong>Status:</strong> ${escapeHtml(data.message)}`;
+                        } else if (data.type === 'tool_execution') {
+                            streamSection.innerHTML = `<strong>Executing:</strong> ${escapeHtml(data.tool)} - ${escapeHtml(data.message)}`;
+                        } else if (data.type === 'julia_output') {
+                            streamSection.innerHTML = `<strong>Julia Output:</strong><div class="code-block" style="margin-top: 5px; font-size: 12px;">${escapeHtml(data.output)}</div>`;
+                        } else if (data.type === 'shell_output') {
+                            streamSection.innerHTML = `<strong>Shell Output:</strong><div class="code-block" style="margin-top: 5px; font-size: 12px;">${escapeHtml(data.output)}</div>`;
+                        } else if (data.type === 'complete') {
+                            streamSection.innerHTML = `<strong>✅ Processing complete</strong>`;
+                            eventSource.close();
+                        }
+                    }
+                } catch (err) {
+                    console.error('[SSE] Error parsing message:', err);
+                }
+            };
+            
+            eventSource.onerror = (error) => {
+                console.error('[SSE] Connection error:', error);
+                eventSource.close();
+            };
+            
+            // Close SSE after 5 minutes to prevent hanging connections
+            setTimeout(() => {
+                if (eventSource.readyState !== EventSource.CLOSED) {
+                    console.log('[SSE] Closing connection after timeout');
+                    eventSource.close();
+                }
+            }, 300000);
+        }
+        
         function clearFile() {
             currentFile = null;
             document.getElementById('fileInput').value = '';

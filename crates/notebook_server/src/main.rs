@@ -259,10 +259,10 @@ async fn handle_submit_query(body: SubmitQueryBody) -> anyhow::Result<SubmitQuer
             
             full_prompt.push_str(
                 "Please follow these steps:\n\
-                1. First, use a shell command to find the location of the file on the system. \
-                   Search in common locations like Downloads, Desktop, Documents, and the home directory.\n\
-                2. Once you find the file path, write Julia code to:\n\
-                   - Load the CSV file from the found path\n\
+                1. If the file path is not complete, you can use a shell command to confirm the location \
+                   of the file. Search in common locations like Downloads, Desktop, Documents, and the home directory.\n\
+                2. Write Julia code to:\n\
+                   - Load the CSV file from the path\n\
                    - Analyze its structure and data types\n\
                    - Clean and validate the data\n\
                    - Convert it to Parquet format for efficient storage\n\

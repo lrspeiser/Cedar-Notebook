@@ -4,6 +4,8 @@ use tower_http::cors::{CorsLayer, Any};
 use axum::{extract::{Path, Query}, http::StatusCode, response::{IntoResponse, Response, sse::{Sse, Event}}, routing::get, Json, Router};
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 use tracing_subscriber::{fmt, EnvFilter, prelude::*};
 
 async fn health() -> &'static str { "ok" }
@@ -86,16 +88,30 @@ async fn cmd_run_shell(Json(body): Json<RunShellBody>) -> Result<Json<serde_json
     })))
 }
 
-async fn sse_run_events(axum::extract::Path(_run_id): axum::extract::Path<String>) -> Sse<impl futures::Stream<Item = Result<Event, std::convert::Infallible>>> {
+// Global event broadcaster for SSE
+type EventBroadcaster = Arc<RwLock<std::collections::HashMap<String, tokio::sync::mpsc::Sender<serde_json::Value>>>>;
+
+async fn sse_run_events(
+    axum::extract::Path(run_id): axum::extract::Path<String>,
+    axum::extract::State(broadcaster): axum::extract::State<EventBroadcaster>,
+) -> Sse<impl futures::Stream<Item = Result<Event, std::convert::Infallible>>> {
     use futures::StreamExt;
     use tokio_stream::wrappers::ReceiverStream;
 
-    // TODO: wire to real core event broadcaster; for now, create a bounded channel and yield nothing until producer sends.
-    let (_tx, rx) = tokio::sync::mpsc::channel::<serde_json::Value>(1024);
+    // Create a channel for this specific run
+    let (tx, rx) = tokio::sync::mpsc::channel::<serde_json::Value>(1024);
+    
+    // Register this channel with the broadcaster
+    {
+        let mut channels = broadcaster.write().await;
+        channels.insert(run_id.clone(), tx);
+    }
+    
     let stream = ReceiverStream::new(rx).map(|ev| {
         let data = serde_json::to_string(&ev).unwrap_or("{}".to_string());
         Ok(Event::default().data(data))
     });
+    
     Sse::new(stream)
 }
 

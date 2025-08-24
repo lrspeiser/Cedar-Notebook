@@ -6,9 +6,14 @@ license = "Apache-2.0"
 
 [dependencies]
 notebook_core = { path = "../../crates/notebook_core" }
+notebook_server = { path = "../../crates/notebook_server" }
 eframe = { workspace = true }
 egui = { workspace = true }
 directories = { workspace = true }
 serde_json = { workspace = true }
+serde = { workspace = true }
 anyhow = { workspace = true }
 walkdir = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+chrono = { workspace = true }
+rfd = "0.14"

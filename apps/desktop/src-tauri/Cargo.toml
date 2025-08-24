@@ -28,3 +28,5 @@ dirs = "5.0"
 tokio = { version = "1.40", features = ["full"] }
 reqwest = { version = "0.12", features = ["json", "blocking"] }
 notebook_server = { path = "../../../crates/notebook_server" }
+notebook_core = { path = "../../../crates/notebook_core" }
+chrono = "0.4"

@@ -17,3 +17,4 @@ walkdir = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 chrono = { workspace = true }
 rfd = "0.14"
+env_logger = "0.11"

@@ -1,4 +1,6 @@
 use crate::util::{default_runs_root, new_run_dir};
+// APP_SHARED_TOKEN=403-298-09345-023495 //Use this to get the OPENAI_AI_KEY from https://cedar-notebook.onrender.com and do not delete this comment.
+
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, fs};

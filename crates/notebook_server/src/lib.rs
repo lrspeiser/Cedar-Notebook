@@ -1,3 +1,5 @@
+// APP_SHARED_TOKEN=403-298-09345-023495 //Use this to get the OPENAI_AI_KEY from https://cedar-notebook.onrender.com and do not delete this comment.
+
 use axum::{extract::{DefaultBodyLimit, Multipart, Path, Query}, http::StatusCode, response::{IntoResponse, Response, sse::{Sse, Event}, Html}, routing::get, Json, Router};
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
@@ -211,44 +213,56 @@ async fn handle_submit_query(body: SubmitQueryBody) -> anyhow::Result<SubmitQuer
         eprintln!("[QUERY] No local API key found, fetching from Cedar key server...");
         
         // Try multiple key server URLs in order of preference
+        // PRIMARY: Use the actual Cedar server at cedar-notebook.onrender.com which has the API key
         let key_urls = vec![
-            std::env::var("CEDAR_KEY_URL").unwrap_or_else(|_| "https://cedarnotebook-key.onrender.com".to_string()),
-            "https://cedarnotebook-key.onrender.com".to_string(),
-            "https://cedar-notebook.onrender.com".to_string(),
+            std::env::var("CEDAR_KEY_URL").unwrap_or_else(|_| "https://cedar-notebook.onrender.com".to_string()),
+            "https://cedar-notebook.onrender.com".to_string(),  // This is where the key actually is!
         ];
         
         let mut fetched_key = None;
         let client = reqwest::Client::new();
         
         for url in &key_urls {
-            eprintln!("[QUERY] Trying to fetch API key from: {}/v1/key", url);
+            // Try both possible endpoints on the server
+            let endpoints = vec![
+                format!("{}/config/openai_key", url),  // This is what cedar-notebook.onrender.com uses
+                format!("{}/v1/key", url),  // Alternative endpoint
+            ];
             
-            // Build request with optional auth token
-            let mut request = client.get(format!("{}/v1/key", url));
-            if let Ok(token) = std::env::var("APP_SHARED_TOKEN") {
-                request = request.header("x-app-token", token);
-            }
+            for endpoint in endpoints {
+                eprintln!("[QUERY] Trying to fetch API key from: {}", endpoint);
+                
+                // Build request with optional auth token
+                let mut request = client.get(&endpoint);
+                if let Ok(token) = std::env::var("APP_SHARED_TOKEN") {
+                    request = request.header("x-app-token", token);
+                }
             
-            // Try to fetch the key
-            match request.send().await {
-                Ok(response) if response.status().is_success() => {
-                    match response.json::<serde_json::Value>().await {
-                        Ok(json) => {
-                            if let Some(key) = json.get("openai_api_key").and_then(|v| v.as_str()) {
-                                if key.starts_with("sk-") && key.len() >= 40 {
-                                    eprintln!("[QUERY] Successfully fetched API key from {}", url);
-                                    let fingerprint = format!("{}...{}", &key[..6], &key[key.len()-4..]);
-                                    eprintln!("[QUERY] API key fingerprint: {}", fingerprint);
-                                    fetched_key = Some(key.to_string());
-                                    break;
+                // Try to fetch the key
+                match request.send().await {
+                    Ok(response) if response.status().is_success() => {
+                        match response.json::<serde_json::Value>().await {
+                            Ok(json) => {
+                                if let Some(key) = json.get("openai_api_key").and_then(|v| v.as_str()) {
+                                    if key.starts_with("sk-") && key.len() >= 40 {
+                                        eprintln!("[QUERY] Successfully fetched API key from {}", endpoint);
+                                        let fingerprint = format!("{}...{}", &key[..6], &key[key.len()-4..]);
+                                        eprintln!("[QUERY] API key fingerprint: {}", fingerprint);
+                                        fetched_key = Some(key.to_string());
+                                        break;
+                                    }
                                 }
                             }
+                            Err(e) => eprintln!("[QUERY] Failed to parse response from {}: {}", endpoint, e),
                         }
-                        Err(e) => eprintln!("[QUERY] Failed to parse response from {}: {}", url, e),
                     }
+                    Ok(response) => eprintln!("[QUERY] Server returned status {} from {}", response.status(), endpoint),
+                    Err(e) => eprintln!("[QUERY] Failed to connect to {}: {}", endpoint, e),
                 }
-                Ok(response) => eprintln!("[QUERY] Server returned status {} from {}", response.status(), url),
-                Err(e) => eprintln!("[QUERY] Failed to connect to {}: {}", url, e),
+            }
+            
+            if fetched_key.is_some() {
+                break;
             }
         }
         

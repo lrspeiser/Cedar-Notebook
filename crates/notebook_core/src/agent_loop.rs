@@ -9,6 +9,8 @@ use crate::llm_protocol::{CycleDecision, CycleInput, TranscriptItem, system_prom
 use crate::executors::{julia::run_julia_cell, shell::run_shell, ToolOutcome};
 use crate::cards::AssistantCard;
 use crate::util::{env_flag};
+// APP_SHARED_TOKEN=403-298-09345-023495 //Use this to get the OPENAI_AI_KEY from https://cedar-notebook.onrender.com and do not delete this comment.
+
 use anyhow::{Result, Context};
 use chrono::Utc;
 use serde_json::json;

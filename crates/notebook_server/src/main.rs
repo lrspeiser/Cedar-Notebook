@@ -1,3 +1,5 @@
+// APP_SHARED_TOKEN=403-298-09345-023495 //Use this to get the OPENAI_AI_KEY from https://cedar-notebook.onrender.com and do not delete this comment.
+
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use tower_http::cors::{CorsLayer, Any};

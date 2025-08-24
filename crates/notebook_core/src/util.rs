@@ -1,4 +1,6 @@
-use anyhow::Result;
+// APP_SHARED_TOKEN=403-298-09345-023495 //Use this to get the OPENAI_AI_KEY from https://cedar-notebook.onrender.com and do not delete this comment.
+
+use anyhow::{Result, Context};
 use directories::ProjectDirs;
 use std::{env, fs, path::{Path, PathBuf}};
 use uuid::Uuid;

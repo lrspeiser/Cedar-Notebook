@@ -11,13 +11,33 @@ use file_search::{search_files, SearchFilesRequest};
 
 mod file_index;
 use file_index::{FileIndexer, IndexedFile, SearchRequest};
+
+mod agent_wrapper;
+use agent_wrapper::agent_loop_with_events;
 use std::sync::{Arc, Mutex};
 use once_cell::sync::Lazy;
+use tokio::sync::broadcast;
 
 // Global file indexer instance
 static FILE_INDEXER: Lazy<Arc<Mutex<Option<FileIndexer>>>> = Lazy::new(|| {
     Arc::new(Mutex::new(None))
 });
+
+// Global event broadcaster for SSE
+static EVENT_BROADCASTER: Lazy<broadcast::Sender<serde_json::Value>> = Lazy::new(|| {
+    let (tx, _rx) = broadcast::channel(100);
+    tx
+});
+
+// Helper function to broadcast events
+fn broadcast_event(event_type: &str, data: serde_json::Value) {
+    let event = serde_json::json!({
+        "type": event_type,
+        "timestamp": chrono::Utc::now().to_rfc3339(),
+        "data": data
+    });
+    let _ = EVENT_BROADCASTER.send(event);
+}
 
 async fn health() -> &'static str { "ok" }
 
@@ -142,15 +162,49 @@ async fn cmd_run_shell(Json(body): Json<RunShellBody>) -> Result<Json<serde_json
 
 async fn sse_run_events(axum::extract::Path(_run_id): axum::extract::Path<String>) -> Sse<impl futures::Stream<Item = Result<Event, std::convert::Infallible>>> {
     use futures::StreamExt;
-    use tokio_stream::wrappers::ReceiverStream;
+    use tokio_stream::wrappers::BroadcastStream;
 
-    // TODO: wire to real core event broadcaster; for now, create a bounded channel and yield nothing until producer sends.
-    let (_tx, rx) = tokio::sync::mpsc::channel::<serde_json::Value>(1024);
-    let stream = ReceiverStream::new(rx).map(|ev| {
-        let data = serde_json::to_string(&ev).unwrap_or("{}".to_string());
-        Ok(Event::default().data(data))
+    // Subscribe to the global event broadcaster
+    let rx = EVENT_BROADCASTER.subscribe();
+    let stream = BroadcastStream::new(rx).map(|result| {
+        match result {
+            Ok(event) => {
+                let data = serde_json::to_string(&event).unwrap_or("{}".to_string());
+                Ok(Event::default().data(data))
+            },
+            Err(_) => {
+                // Handle lagged receiver by sending a skip message
+                Ok(Event::default().data(r#"{"type":"skipped"}"#))
+            }
+        }
     });
     Sse::new(stream)
+}
+
+// New endpoint for live events (no run_id required)
+async fn sse_live_events() -> Sse<impl futures::Stream<Item = Result<Event, std::convert::Infallible>>> {
+    use futures::StreamExt;
+    use tokio_stream::wrappers::BroadcastStream;
+
+    // Subscribe to the global event broadcaster
+    let rx = EVENT_BROADCASTER.subscribe();
+    let stream = BroadcastStream::new(rx).map(|result| {
+        match result {
+            Ok(event) => {
+                let data = serde_json::to_string(&event).unwrap_or("{}".to_string());
+                Ok(Event::default().data(data))
+            },
+            Err(_) => {
+                // Handle lagged receiver by sending a skip message
+                Ok(Event::default().data(r#"{"type":"skipped"}"#))
+            }
+        }
+    });
+    Sse::new(stream).keep_alive(
+        axum::response::sse::KeepAlive::new()
+            .interval(std::time::Duration::from_secs(30))
+            .text("keep-alive")
+    )
 }
 
 #[derive(Deserialize)]
@@ -429,12 +483,20 @@ async fn handle_submit_query(body: SubmitQueryBody) -> anyhow::Result<SubmitQuer
     // Clone full_prompt for debug output later
     let full_prompt_debug = full_prompt.clone();
     
+    // Broadcast the initial prompt to frontend
+    broadcast_event("llm_prompt", serde_json::json!({
+        "run_id": run_id.clone(),
+        "prompt": full_prompt.clone(),
+        "model": config.openai_model.clone(),
+    }));
+    
     // Run agent in spawned task to avoid blocking
     let result = tokio::task::spawn_blocking(move || {
         // Create a mini tokio runtime for the agent loop
         let rt = tokio::runtime::Runtime::new()?;
         // Use 50 turns to give the LLM plenty of chances to fix errors and complete complex tasks
-        rt.block_on(agent_loop(&run_dir, &full_prompt, 50, config))
+        // Use the agent_loop_with_events wrapper that broadcasts events
+        rt.block_on(agent_loop_with_events(&run_dir, &full_prompt, 50, config))
     })
     .await??;
     
@@ -1085,6 +1147,7 @@ pub async fn serve() -> anyhow::Result<()> {
         .route("/datasets/:dataset_id", get(get_dataset).delete(delete_dataset))
         // SSE events
         .route("/runs/:run_id/events", get(sse_run_events))
+        .route("/events/live", get(sse_live_events))
         // Configuration endpoints
         .route("/config/openai_key", get(get_openai_key))
         // File search endpoints

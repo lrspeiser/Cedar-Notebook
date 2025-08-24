@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Cedar SSE Event Monitor</title>
+    <style>
+        body {
+            font-family: 'Monaco', 'Menlo', monospace;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            margin: 0;
+        }
+        h1 {
+            color: #569cd6;
+            border-bottom: 2px solid #569cd6;
+            padding-bottom: 10px;
+        }
+        #events {
+            background: #252526;
+            border: 1px solid #3c3c3c;
+            border-radius: 5px;
+            padding: 15px;
+            max-height: 600px;
+            overflow-y: auto;
+            margin-bottom: 20px;
+        }
+        .event {
+            margin-bottom: 10px;
+            padding: 10px;
+            background: #2d2d30;
+            border-left: 3px solid #569cd6;
+            border-radius: 3px;
+        }
+        .event-type {
+            color: #4ec9b0;
+            font-weight: bold;
+        }
+        .event-time {
+            color: #808080;
+            font-size: 0.9em;
+        }
+        .event-data {
+            margin-top: 5px;
+            white-space: pre-wrap;
+            color: #ce9178;
+        }
+        .llm-request { border-left-color: #c586c0; }
+        .llm-response { border-left-color: #4ec9b0; }
+        .julia-code { border-left-color: #dcdcaa; }
+        .julia-result { border-left-color: #6a9955; }
+        .error { 
+            border-left-color: #f48771; 
+            background: #3c2a2a;
+        }
+        #controls {
+            margin-bottom: 20px;
+        }
+        button {
+            background: #007acc;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 3px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background: #005a9e;
+        }
+        #status {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 3px;
+            margin-left: 10px;
+        }
+        .connected {
+            background: #2d5a2d;
+            color: #4ec9b0;
+        }
+        .disconnected {
+            background: #5a2d2d;
+            color: #f48771;
+        }
+        input {
+            background: #3c3c3c;
+            border: 1px solid #569cd6;
+            color: #d4d4d4;
+            padding: 8px;
+            border-radius: 3px;
+            width: 400px;
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🌲 Cedar SSE Event Monitor</h1>
+    
+    <div id="controls">
+        <button onclick="connect()">Connect</button>
+        <button onclick="disconnect()">Disconnect</button>
+        <button onclick="clearEvents()">Clear</button>
+        <span id="status" class="disconnected">Disconnected</span>
+    </div>
+
+    <div>
+        <input type="text" id="query" placeholder="Enter a test query..." value="What is 2+2?">
+        <button onclick="sendQuery()">Send Query</button>
+    </div>
+
+    <h2>Live Events:</h2>
+    <div id="events"></div>
+
+    <script>
+        let eventSource = null;
+        let eventCount = 0;
+
+        function connect() {
+            if (eventSource) {
+                eventSource.close();
+            }
+
+            eventSource = new EventSource('http://localhost:8080/events/live');
+            document.getElementById('status').className = 'connected';
+            document.getElementById('status').textContent = 'Connected';
+            
+            addEvent('system', { message: 'Connected to SSE endpoint' });
+
+            eventSource.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    addEvent(data.type, data.data, data.timestamp);
+                } catch (e) {
+                    console.error('Failed to parse event:', e);
+                    addEvent('error', { error: 'Failed to parse event', raw: event.data });
+                }
+            };
+
+            eventSource.onerror = (error) => {
+                document.getElementById('status').className = 'disconnected';
+                document.getElementById('status').textContent = 'Connection Error';
+                addEvent('error', { error: 'SSE connection error' });
+            };
+
+            eventSource.onopen = () => {
+                document.getElementById('status').className = 'connected';
+                document.getElementById('status').textContent = 'Connected';
+            };
+        }
+
+        function disconnect() {
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+                document.getElementById('status').className = 'disconnected';
+                document.getElementById('status').textContent = 'Disconnected';
+                addEvent('system', { message: 'Disconnected from SSE endpoint' });
+            }
+        }
+
+        function clearEvents() {
+            document.getElementById('events').innerHTML = '';
+            eventCount = 0;
+        }
+
+        function addEvent(type, data, timestamp) {
+            eventCount++;
+            const eventsDiv = document.getElementById('events');
+            const eventDiv = document.createElement('div');
+            eventDiv.className = `event ${type.replace(/_/g, '-')}`;
+            
+            const time = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
+            
+            let dataDisplay = '';
+            if (typeof data === 'object') {
+                // Special formatting for specific event types
+                if (type === 'llm_request' && data.prompt) {
+                    dataDisplay = `Model: ${data.model || 'unknown'}\nPrompt:\n${data.prompt}`;
+                } else if (type === 'llm_response' && data.decision) {
+                    dataDisplay = JSON.stringify(data.decision, null, 2);
+                } else if (type === 'julia_code' && data.code) {
+                    dataDisplay = `Julia Code:\n${data.code}`;
+                } else if (type === 'shell_command' && data.command) {
+                    dataDisplay = `Command: ${data.command}`;
+                } else {
+                    dataDisplay = JSON.stringify(data, null, 2);
+                }
+            } else {
+                dataDisplay = data;
+            }
+
+            eventDiv.innerHTML = `
+                <div class="event-type">[${type}] <span class="event-time">${time}</span></div>
+                <div class="event-data">${escapeHtml(dataDisplay)}</div>
+            `;
+            
+            eventsDiv.insertBefore(eventDiv, eventsDiv.firstChild);
+            
+            // Keep only last 100 events
+            while (eventsDiv.children.length > 100) {
+                eventsDiv.removeChild(eventsDiv.lastChild);
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function sendQuery() {
+            const query = document.getElementById('query').value;
+            if (!query) return;
+
+            addEvent('system', { message: `Sending query: ${query}` });
+
+            try {
+                const response = await fetch('http://localhost:8080/commands/submit_query', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ prompt: query })
+                });
+
+                const result = await response.json();
+                addEvent('system', { message: 'Query completed', result: result });
+            } catch (error) {
+                addEvent('error', { error: error.message });
+            }
+        }
+
+        // Auto-connect on load
+        window.onload = () => {
+            connect();
+        };
+
+        // Disconnect on unload
+        window.onbeforeunload = () => {
+            if (eventSource) {
+                eventSource.close();
+            }
+        };
+    </script>
+</body>
+</html>

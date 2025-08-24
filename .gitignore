@@ -28,3 +28,7 @@ services/relay/.env
 # Logs
 logs/
 *.log
+# Exclude DMG files (too large for Git)
+*.dmg
+apps/cedar-bundle/*.dmg
+target/release/bundle/dmg/*.dmg

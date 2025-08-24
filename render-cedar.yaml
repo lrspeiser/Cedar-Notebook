@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: cedar-notebook
+    runtime: rust
+    buildCommand: |
+      echo "==> Building Cedar Server..."
+      cargo build --release --bin notebook_server
+    startCommand: "./target/release/notebook_server"
+    envVars:
+      - key: PORT
+        value: "10000"
+      - key: OPENAI_API_KEY
+        sync: false  # Set this in Render dashboard
+      - key: APP_SHARED_TOKEN
+        value: "403-298-09345-023495"
+      - key: RUST_LOG
+        value: "info"
+      - key: CEDAR_KEY_URL
+        value: "https://cedar-notebook.onrender.com"
+    healthCheckPath: /health
+    autoDeploy: true

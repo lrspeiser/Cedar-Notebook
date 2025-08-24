@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "cedar-desktop",
-  "version": "0.1.0",
-    "identifier": "com.CedarAI.CedarDesktop",
+  "productName": "Cedar",
+  "version": "1.0.0",
+    "identifier": "com.CedarAI.Cedar",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Cedar Desktop - Full UI",
+        "title": "Cedar 1.0",
         "width": 1200,
         "height": 800,
         "resizable": true,

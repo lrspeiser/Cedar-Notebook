@@ -23,7 +23,7 @@ use tracing::{debug, info};
 
 // APP_SHARED_TOKEN=403-298-09345-023495 //Use this to get the OPENAI_AI_KEY from https://cedar-notebook.onrender.com and do not delete this comment.
 
-use crate::executors::{ToolOutcome, TableInfo};
+use crate::executors::ToolOutcome;
 
 
 fn spawn_log_threads(child: &mut Child) -> (thread::JoinHandle<String>, thread::JoinHandle<String>) {

@@ -485,6 +485,135 @@ cd tests
 ✅ ALL TESTS PASSED!
 ```
 
+### Debug Testing & LLM Visibility
+
+Cedar includes powerful testing tools that provide complete visibility into LLM interactions, prompts, responses, and system behavior:
+
+#### Key Debug Test Scripts
+
+1. **`test_llm_detailed.py`** - Most Comprehensive LLM I/O Visibility
+   - Shows exactly what's sent to and received from the LLM
+   - Displays prompts, raw JSON responses, generated Julia code, execution output
+   - Color-coded terminal output for easy reading
+   - Tests multiple scenarios (math, code generation, non-computational questions)
+
+2. **`test_llm_debug.py`** - Full Server Debug Logging
+   - Starts server with `RUST_LOG=debug` and `CEDAR_LOG_LLM_JSON=1`
+   - Captures and displays all server output in real-time
+   - Shows complete server logs alongside test execution
+   - Fetches API key from Render and configures environment automatically
+
+3. **`test-sse.html`** - Real-Time Event Streaming Monitor
+   - Web-based SSE monitor for `/events/live` endpoint
+   - Shows real-time LLM requests, responses, Julia code, execution results
+   - Visual interface with color-coded events
+   - Can send test queries and watch the entire processing flow
+
+4. **`test_e2e_with_retry.py`** - LLM Self-Correction Demonstration
+   - Demonstrates error recovery and retry logic
+   - Shows initial failing code, error messages, and corrected code
+   - Displays what the LLM "sees" and how it fixes issues
+   - Color-coded output showing LLM submit/receive messages
+
+5. **`test_comprehensive_llm.py`** - Full Test Suite with Detailed Logging
+   - Tests research loop, file upload, code generation
+   - Uses `RUST_LOG=info,notebook_server=debug` for detailed logs
+   - Shows sample responses for successful tests
+   - Comprehensive reporting with pass/fail status
+
+#### Debug Environment Variables
+
+```bash
+# Maximum debug logging
+export RUST_LOG=debug                    # Full Rust debug output
+export CEDAR_LOG_LLM_JSON=1             # Log raw LLM JSON responses
+export RUST_BACKTRACE=1                 # Show full stack traces on errors
+
+# Start server with debug logging
+RUST_LOG=debug CEDAR_LOG_LLM_JSON=1 cargo run --bin notebook_server
+```
+
+#### Running Debug Tests
+
+```bash
+# 1. Most detailed LLM interaction visibility
+cd tests
+python3 test_llm_detailed.py
+
+# 2. With full server debug logs (auto-fetches API key)
+python3 test_llm_debug.py
+
+# 3. Real-time monitoring (start server first, then open HTML)
+./start_cedar_server.sh
+open test-sse.html  # Opens in browser for live monitoring
+
+# 4. See error recovery in action
+python3 test_e2e_with_retry.py
+
+# 5. Comprehensive test suite with logging
+python3 test_comprehensive_llm.py
+```
+
+#### What You Can See
+
+These debug tools provide complete visibility into:
+- **Exact prompts** sent to the LLM with full context
+- **Raw JSON responses** from GPT models
+- **Generated Julia/shell code** before execution
+- **Execution outputs and errors** with stack traces
+- **Debug logs** from the Rust backend server
+- **Real-time event streams** via SSE for live monitoring
+- **Error recovery attempts** and self-correction logic
+- **API key fetching** and configuration
+- **Request/response timing** and performance metrics
+
+#### Example Debug Output
+
+```bash
+# From test_llm_detailed.py
+==============================================================
+Testing: Simple Math Question
+==============================================================
+
+📝 Prompt: What is 2+2? Just give me the number.
+
+📤 Sending to backend...
+   Endpoint: http://localhost:8080/commands/submit_query
+   Payload: {
+     "prompt": "What is 2+2? Just give me the number.",
+     "datasets": [],
+     "file_context": null
+   }
+
+⏱️  Response time: 1.23 seconds
+
+✅ SUCCESS - Status: 200
+
+📥 Response Details:
+
+🔑 Run ID: run_abc123
+
+💬 Final Answer:
+   4
+
+📝 Generated Julia Code:
+   println(2 + 2)
+
+🖥️  Execution Output:
+   4
+
+📄 Raw JSON Response:
+{
+  "run_id": "run_abc123",
+  "response": "4",
+  "julia_code": "println(2 + 2)",
+  "execution_output": "4",
+  "decision": "run_julia"
+}
+```
+
+The combination of `test_llm_detailed.py` for structured testing and `test-sse.html` for real-time monitoring provides the most comprehensive view of Cedar's LLM integration and processing pipeline.
+
 ---
 
 ## Building and Deployment

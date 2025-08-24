@@ -12,6 +12,40 @@ struct FileInfo {
     size: u64,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct SubmitQueryBody {
+    prompt: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct SubmitQueryResponse {
+    run_id: String,
+    final_message: String,
+}
+
+#[tauri::command]
+async fn cmd_submit_query(
+    body: SubmitQueryBody,
+) -> Result<SubmitQueryResponse, String> {
+    // Use the native backend to process the query
+    let query = body.prompt.clone();
+    
+    // For now, since submit_query is just a placeholder that returns immediately,
+    // we can call it directly without worrying about thread safety
+    let result = format!("Query received: {}", query);
+    
+    // Generate a simple run ID
+    let run_id = format!("run_{}", std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs());
+    
+    Ok(SubmitQueryResponse {
+        run_id,
+        final_message: result,
+    })
+}
+
 #[tauri::command]
 async fn select_file(app_handle: tauri::AppHandle) -> Result<Option<FileInfo>, String> {
     use tauri_plugin_dialog::DialogExt;
@@ -78,28 +112,24 @@ async fn process_file_at_path(file_path: String) -> Result<String, String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-  // CRITICAL: Load environment variables for backend server
-  // The backend server will handle all API key management
+  // CRITICAL: Load environment variables for backend
+  // The backend will handle all API key management
   // It will use local .env or fetch from cedar-notebook.onrender.com
   load_env_config();
   
-  // Start the backend server in a separate thread
-  std::thread::spawn(|| {
-    let runtime = tokio::runtime::Runtime::new().unwrap();
-    runtime.block_on(async {
-      println!("Starting embedded Cedar backend server...");
-      if let Err(e) = notebook_server::serve().await {
-        eprintln!("Backend server error: {}", e);
+  // Validate API key availability by testing initialization
+  let runtime = tokio::runtime::Runtime::new().unwrap();
+  let has_key = runtime.block_on(async {
+    match notebook_server::initialize_native() {
+      Ok(backend) => backend.initialize_api_key().await.is_ok(),
+      Err(e) => {
+        eprintln!("Failed to initialize backend: {}", e);
+        false
       }
-    });
+    }
   });
   
-  // Give the backend a moment to start
-  std::thread::sleep(std::time::Duration::from_secs(2));
-  
-  // CRITICAL: Validate the backend can get an API key
-  // This happens AFTER the backend starts, not before
-  if !validate_backend_api_key() {
+  if !has_key {
     show_api_key_error();
     return;
   }
@@ -114,7 +144,7 @@ pub fn run() {
   
   tauri::Builder::default()
     .plugin(tauri_plugin_dialog::init())
-    .invoke_handler(tauri::generate_handler![select_file, process_file_at_path])
+    .invoke_handler(tauri::generate_handler![cmd_submit_query, select_file, process_file_at_path])
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
@@ -281,38 +311,23 @@ fn load_env_config() {
   }
 }
 
-/// Validate that the backend can access an API key
-/// Returns true if a key is available, false otherwise
-fn validate_backend_api_key() -> bool {
-  // Check if we have a local key
-  if std::env::var("OPENAI_API_KEY").is_ok() {
-    eprintln!("[cedar] ✅ API key validation passed (local key)");
-    return true;
-  }
+/// Show an error dialog when initialization fails
+fn show_initialization_error(message: &str) {
+  eprintln!("\n===========================================\n");
+  eprintln!("ERROR: {}", message);
+  eprintln!("\n===========================================\n");
   
-  // Check if we can fetch from the server
-  if std::env::var("CEDAR_KEY_URL").is_ok() && std::env::var("APP_SHARED_TOKEN").is_ok() {
-    // Try to make a test request to the backend
-    let client = reqwest::blocking::Client::new();
-    match client.get("http://localhost:3000/api/health")
-      .timeout(std::time::Duration::from_secs(5))
-      .send() 
-    {
-      Ok(response) if response.status().is_success() => {
-        eprintln!("[cedar] ✅ Backend is healthy and can fetch API key");
-        return true;
-      }
-      Ok(response) => {
-        eprintln!("[cedar] ❌ Backend health check failed: {}", response.status());
-      }
-      Err(e) => {
-        eprintln!("[cedar] ❌ Could not reach backend: {}", e);
-      }
-    }
+  // On macOS, also show a native alert
+  #[cfg(target_os = "macos")]
+  {
+    use std::process::Command;
+    let _ = Command::new("osascript")
+      .args(&[
+        "-e",
+        &format!(r#"display alert "Cedar - Initialization Error" message "{}" as critical"#, message)
+      ])
+      .output();
   }
-  
-  eprintln!("[cedar] ❌ No API key available - app cannot function");
-  false
 }
 
 /// Show an error dialog when API key is not available

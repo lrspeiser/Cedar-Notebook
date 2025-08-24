@@ -32,3 +32,12 @@ logs/
 *.dmg
 apps/cedar-bundle/*.dmg
 target/release/bundle/dmg/*.dmg
+
+# Exclude large binary files
+*.tar.gz
+*.tgz
+*.tar
+*.zip
+apps/cedar-bundle/resources/julia*
+apps/cedar-bundle/resources/julia_env/
+

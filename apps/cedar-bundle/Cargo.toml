@@ -43,9 +43,13 @@ Cedar is an AI-powered agent that executes Julia code, runs shell commands,
 and processes data using an LLM to interpret and respond to your queries.
 """
 icon = [
-    "../../crates/notebook_server/icons/32x32.png",
-    "../../crates/notebook_server/icons/128x128.png",
-    "../../crates/notebook_server/icons/128x128@2x.png",
-    "../../crates/notebook_server/icons/icon.icns"
+    "../../images/icons/icon_32x32.png",
+    "../../images/icons/icon_128x128.png",
+    "../../images/icons/icon_128x128@2x.png",
+    "../../images/icons/icon_256x256.png",
+    "../../images/icons/icon_256x256@2x.png",
+    "../../images/icons/icon_512x512.png",
+    "../../images/icons/icon_512x512@2x.png",
+    "../../images/icons/Cedar.icns"
 ]
 resources = ["../../apps/web-ui/"]

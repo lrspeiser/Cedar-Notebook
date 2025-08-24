@@ -69,12 +69,16 @@ else
     echo -e "${YELLOW}Warning: Embedded Julia not found. App will use system Julia.${NC}"
 fi
 
+# Copy the icon to the bundle
+echo -e "${BLUE}Copying app icon...${NC}"
+cp ../../images/icons/Cedar.icns "$BUNDLE_PATH/Contents/Resources/AppIcon.icns"
+
 # Create a DMG using create-dmg if available, otherwise use hdiutil
 if command -v create-dmg &> /dev/null; then
     echo -e "${BLUE}Creating DMG with create-dmg...${NC}"
     create-dmg \
         --volname "Cedar" \
-        --volicon "$BUNDLE_PATH/Contents/Resources/icon.icns" \
+        --volicon "../../images/icons/Cedar.icns" \
         --window-pos 200 120 \
         --window-size 600 400 \
         --icon-size 100 \

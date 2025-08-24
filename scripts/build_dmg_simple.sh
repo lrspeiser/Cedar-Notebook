@@ -11,6 +11,7 @@ BUILD_DIR="/tmp/cedar-dmg"
 # Clean and create build directory
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR/$APP_NAME/Contents/MacOS"
+mkdir -p "$BUILD_DIR/$APP_NAME/Contents/Resources"
 mkdir -p "$BUILD_DIR/$APP_NAME/Contents/Resources/web-ui"
 
 echo "Building backend..."
@@ -24,6 +25,9 @@ chmod +x "$BUILD_DIR/$APP_NAME/Contents/MacOS/Cedar"
 
 # Copy web UI
 cp apps/web-ui/index.html "$BUILD_DIR/$APP_NAME/Contents/Resources/web-ui/"
+
+# Copy icon
+cp ~/Projects/cedarcli/images/icons/Cedar.icns "$BUILD_DIR/$APP_NAME/Contents/Resources/AppIcon.icns"
 
 # Create Info.plist
 cat > "$BUILD_DIR/$APP_NAME/Contents/Info.plist" << 'EOF'
@@ -41,6 +45,10 @@ cat > "$BUILD_DIR/$APP_NAME/Contents/Info.plist" << 'EOF'
     <string>1.0.0</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    <key>CFBundleIconName</key>
+    <string>AppIcon</string>
 </dict>
 </plist>
 EOF

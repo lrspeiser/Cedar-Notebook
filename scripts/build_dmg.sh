@@ -56,6 +56,11 @@ else
     echo -e "${YELLOW}⚠ No .env file found, app will use defaults${NC}"
 fi
 
+echo -e "\n${YELLOW}Step 4c: Copying app icon...${NC}"
+# Copy the Cedar icon to the app bundle
+cp images/icons/Cedar.icns "$BUILD_DIR/Cedar.app/Contents/Resources/AppIcon.icns"
+echo -e "${GREEN}✓ App icon copied${NC}"
+
 echo -e "\n${YELLOW}Step 5: Creating Info.plist...${NC}"
 cat > "$BUILD_DIR/Cedar.app/Contents/Info.plist" << 'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -77,6 +82,8 @@ cat > "$BUILD_DIR/Cedar.app/Contents/Info.plist" << 'EOF'
     <key>CFBundleExecutable</key>
     <string>Cedar</string>
     <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    <key>CFBundleIconName</key>
     <string>AppIcon</string>
     <key>NSHighResolutionCapable</key>
     <true/>

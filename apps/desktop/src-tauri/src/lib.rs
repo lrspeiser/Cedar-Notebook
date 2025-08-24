@@ -83,12 +83,6 @@ pub fn run() {
   // It will use local .env or fetch from cedar-notebook.onrender.com
   load_env_config();
   
-  // Note: We don't validate API keys here - the backend handles everything
-  // The backend will:
-  // 1. Check for OPENAI_API_KEY in environment
-  // 2. Fetch from onrender server if needed
-  // 3. Return appropriate errors to the frontend if no key is available
-  
   // Start the backend server in a separate thread
   std::thread::spawn(|| {
     let runtime = tokio::runtime::Runtime::new().unwrap();
@@ -102,6 +96,13 @@ pub fn run() {
   
   // Give the backend a moment to start
   std::thread::sleep(std::time::Duration::from_secs(2));
+  
+  // CRITICAL: Validate the backend can get an API key
+  // This happens AFTER the backend starts, not before
+  if !validate_backend_api_key() {
+    show_api_key_error();
+    return;
+  }
   
   // Ensure the app appears in the dock on macOS
   #[cfg(target_os = "macos")]
@@ -277,5 +278,63 @@ fn load_env_config() {
     eprintln!("[cedar] ✅ Using local OPENAI_API_KEY");
   } else {
     eprintln!("[cedar] ⚠️  No API key configuration found. Will try to fetch at runtime.");
+  }
+}
+
+/// Validate that the backend can access an API key
+/// Returns true if a key is available, false otherwise
+fn validate_backend_api_key() -> bool {
+  // Check if we have a local key
+  if std::env::var("OPENAI_API_KEY").is_ok() {
+    eprintln!("[cedar] ✅ API key validation passed (local key)");
+    return true;
+  }
+  
+  // Check if we can fetch from the server
+  if std::env::var("CEDAR_KEY_URL").is_ok() && std::env::var("APP_SHARED_TOKEN").is_ok() {
+    // Try to make a test request to the backend
+    let client = reqwest::blocking::Client::new();
+    match client.get("http://localhost:3000/api/health")
+      .timeout(std::time::Duration::from_secs(5))
+      .send() 
+    {
+      Ok(response) if response.status().is_success() => {
+        eprintln!("[cedar] ✅ Backend is healthy and can fetch API key");
+        return true;
+      }
+      Ok(response) => {
+        eprintln!("[cedar] ❌ Backend health check failed: {}", response.status());
+      }
+      Err(e) => {
+        eprintln!("[cedar] ❌ Could not reach backend: {}", e);
+      }
+    }
+  }
+  
+  eprintln!("[cedar] ❌ No API key available - app cannot function");
+  false
+}
+
+/// Show an error dialog when API key is not available
+fn show_api_key_error() {
+  eprintln!("\n===========================================\n");
+  eprintln!("ERROR: Cedar requires an OpenAI API key to function.\n");
+  eprintln!("The app cannot start without a valid API key.\n");
+  eprintln!("Please ensure either:\n");
+  eprintln!("1. OPENAI_API_KEY is set in your environment, OR");
+  eprintln!("2. The app can fetch a key from cedar-notebook.onrender.com\n");
+  eprintln!("For more information, see the README.\n");
+  eprintln!("===========================================\n");
+  
+  // On macOS, also show a native alert
+  #[cfg(target_os = "macos")]
+  {
+    use std::process::Command;
+    let _ = Command::new("osascript")
+      .args(&[
+        "-e",
+        r#"display alert "Cedar - API Key Required" message "Cedar requires an OpenAI API key to function.\n\nPlease set OPENAI_API_KEY in your environment or ensure the app can connect to the key server.\n\nSee the README for setup instructions." as critical"#
+      ])
+      .output();
   }
 }

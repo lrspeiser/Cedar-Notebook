@@ -278,10 +278,10 @@ async fn handle_submit_query(body: SubmitQueryBody) -> anyhow::Result<SubmitQuer
         let client = reqwest::Client::new();
         
         for url in &key_urls {
-            // Try both possible endpoints on the server
+            // The working endpoint is /v1/key (confirmed via curl testing)
             let endpoints = vec![
-                format!("{}/config/openai_key", url),  // This is what cedar-notebook.onrender.com uses
-                format!("{}/v1/key", url),  // Alternative endpoint
+                format!("{}/v1/key", url),  // Primary endpoint - confirmed working
+                format!("{}/config/openai_key", url),  // Fallback for compatibility
             ];
             
             for endpoint in endpoints {
@@ -1014,14 +1014,12 @@ async fn get_openai_key() -> Result<Json<serde_json::Value>, (StatusCode, String
         .build()
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to create HTTP client: {}", e)))?;
     
-    let endpoint = format!("{}/get-key", cedar_key_url);
+    let endpoint = format!("{}/v1/key", cedar_key_url);
     eprintln!("[cedar-server] Fetching API key from: {}", endpoint);
     
     let response = client
-        .post(&endpoint)
-        .json(&serde_json::json!({
-            "token": app_token
-        }))
+        .get(&endpoint)  // Use GET request as the endpoint expects
+        .header("x-app-token", app_token)  // Pass token as header
         .send()
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to fetch key from onrender: {}", e)))?;

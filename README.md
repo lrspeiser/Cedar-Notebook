@@ -121,6 +121,24 @@ But in production, users just run the app - no setup needed!
 - Debug logs show key source and fingerprint (not full key)
 - Frontend shows helpful guidance for resolution
 
+### 🚨 Startup Validation
+
+**Cedar validates API key availability at startup** to ensure a smooth user experience:
+
+1. **Environment Loading** - Checks multiple locations for `.env` files
+2. **Backend Initialization** - Starts the embedded server
+3. **API Key Validation** - Verifies that either:
+   - A local `OPENAI_API_KEY` is available, OR
+   - The backend can successfully fetch from the key server
+4. **Error Display** - Shows a clear error message if no key is available
+
+If the validation fails, Cedar will:
+- Display a native system alert (on macOS)
+- Print detailed error information to the console
+- Prevent the app from starting to avoid confusing errors later
+
+This ensures users know immediately if there's a configuration issue rather than encountering cryptic errors when trying to use the app.
+
 See `docs/openai-key-flow.md` for implementation details.
 
 ---

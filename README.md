@@ -1,10 +1,14 @@
 # Cedar Notebook: Architecture & Agent Loop Overview
 
+## 🎉 Version 1.0 Release
+
+**Cedar Notebook v1.0** is now available with production-ready features including real-time debugging, cloud deployment, and a polished desktop experience.
+
 ## About Cedar Notebook
 
-Cedar Notebook is a Rust-first project that wraps the core Cedar agent into a multi-modal notebook experience.  
-It exposes a CLI, an HTTP/WS server, and a Tauri desktop app; all three UIs delegate **all business logic** to a common backend.  
-The backend contains the long-running agent loop, executors for Julia and shell tasks, data-catalog/metadata helpers, run management, and OpenAI key management.
+Cedar Notebook is a Rust-first desktop application that wraps the core Cedar agent into a native notebook experience.  
+It's built with Tauri for a lightweight, secure desktop app that runs on macOS, Windows, and Linux.  
+The app embeds a local backend server that contains the long-running agent loop, executors for Julia and shell tasks, data-catalog/metadata helpers, run management, and OpenAI key management.
 
 ### 🔑 Zero-Configuration API Key Management
 
@@ -33,8 +37,7 @@ The project is organized into a clean directory structure:
 ├── render.yaml             # Render deployment config
 │
 ├── apps/                   # Frontend applications
-│   ├── desktop/            # Tauri desktop app
-│   └── web-ui/             # Web interface
+│   └── desktop/            # Tauri desktop app (main UI)
 │
 ├── crates/                 # Rust crates (core logic)
 │   ├── notebook_core/      # Core business logic (agent loop, executors)
@@ -65,7 +68,7 @@ The project is organized into a clean directory structure:
 └── logs/                   # Log files (gitignored)
 ```
 
-Separation of concerns – the backend lives in `notebook_core` and `notebook_server` and contains thousands of lines of code, whereas the UI layers (`notebook_tauri`, CLI and web UI) are intentionally small (often under a few hundred lines). This ensures that new interfaces can be added without touching business logic.
+Separation of concerns – the backend lives in `notebook_core` and `notebook_server` and contains thousands of lines of code, whereas the UI layer (Tauri desktop app) is intentionally thin, serving only as a native wrapper around the embedded web view. This ensures clean architecture and maintainability.
 
 ---
 
@@ -236,21 +239,58 @@ Backend constructs prompt; model may first `find` the file, then generate Julia 
 
 ## Recent Enhancements
 
-### Server-Sent Events (SSE) Streaming
+### Server-Sent Events (SSE) Streaming & Real-Time Debugging
 
-The system now supports real-time processing updates via SSE:
+The system now supports comprehensive real-time debugging and processing updates via SSE:
 
+#### Production Features
 * Frontend connects to `/runs/{run_id}/events` when processing starts
 * Backend broadcasts status updates, tool executions, outputs
 * No UI changes required - updates appear inline in result cards
 * Auto-closes connections after 5 minutes to prevent hanging
 
-### Native File Dialog (Tauri Desktop)
+#### 🆕 Debug Mode - Real-Time LLM Transparency (v1.0)
+* **Live Event Stream**: Connect to `/events/live` for complete debugging visibility
+* **Full LLM Transparency**: See exact prompts sent to GPT, raw responses received
+* **Code Execution Tracking**: Monitor Julia code, shell commands as they execute
+* **Error Debugging**: Instant visibility into errors and recovery attempts
+* **Global Broadcast Channel**: Tokio-based event broadcasting for all connected clients
+
+#### Debug Event Types
+```json
+// Example events streamed in real-time
+{"type":"prompt_sent","content":"User query: Analyze sales data..."}
+{"type":"llm_response","content":"{\"action\":\"run_julia\",\"args\":{...}}"}
+{"type":"julia_code","content":"using DataFrames\ndf = DataFrame(CSV.File(\"sales.csv\"))"}
+{"type":"execution_result","content":"DataFrame with 1000 rows, 5 columns"}
+{"type":"error","content":"FileNotFoundError: sales.csv"}
+```
+
+#### Testing Debug Mode
+```html
+<!-- Simple HTML page to view live events -->
+<!DOCTYPE html>
+<html>
+<head><title>Cedar Debug Stream</title></head>
+<body>
+  <div id="events"></div>
+  <script>
+    const evtSource = new EventSource('http://localhost:8080/events/live');
+    evtSource.onmessage = (event) => {
+      document.getElementById('events').innerHTML += 
+        `<pre>${JSON.stringify(JSON.parse(event.data), null, 2)}</pre><hr>`;
+    };
+  </script>
+</body>
+</html>
+```
+
+### Native File Dialog
 
 * Desktop app uses native OS file dialogs via Tauri
 * Direct file path access - no upload needed
 * Backend receives full path and processes locally
-* Web fallback uses preview + file search strategy
+* Seamless integration with local file system
 
 ### Spotlight File Indexing & Search
 
@@ -431,54 +471,145 @@ cd tests
 
 ## Building and Deployment
 
-### Desktop App (Tauri)
+### Desktop App (Tauri) - v1.0
 
 ```bash
 # Build the desktop app
 cd apps/desktop
-npm run tauri build
+npm run build         # Build frontend
+npm run tauri:build   # Build complete app
 
-# Output: target/release/bundle/dmg/cedar-desktop_0.1.0_aarch64.dmg
+# Output: target/release/bundle/dmg/Cedar_1.0.0_aarch64.dmg
 ```
 
-### Backend Server
+**🆕 Version 1.0 Features:**
+- Updated Cedar branding and icons
+- Native macOS app with code signing ready
+- Optimized bundle size
+- Production-ready DMG installer
+
+### Backend Server (Embedded)
+
+The backend server is automatically embedded and started by the desktop app. For development:
 
 ```bash
-# Build optimized binary
+# Build and run backend separately for testing
 cargo build --release --bin notebook_server
-
-# Run with API key
 OPENAI_API_KEY="sk-..." ./target/release/notebook_server
+```
+
+### 🆕 Cloud Deployment - Render Platform (v1.0)
+
+**Cedar is now deployed on Render with automatic builds and deployments!**
+
+#### Live Production URL
+```
+https://cedarnotebook.onrender.com
+```
+
+#### Deployment Configuration
+
+The project includes a complete Render deployment setup:
+
+```yaml
+# render.yaml
+services:
+  - type: web
+    name: cedarnotebook
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: RUST_LOG
+        value: debug
+      - key: PORT
+        value: 8080
+```
+
+#### Build Script for Cloud Deployment
+
+```bash
+# scripts/build_for_render.sh
+#!/bin/bash
+# Optimized build script for Render deployment
+# - Downloads Julia runtime directly (avoids Git LFS)
+# - Builds Rust server from source
+# - Sets up complete environment
+```
+
+#### Git LFS Management
+
+For cloud deployment, large files are excluded from Git:
+```gitignore
+# .gitignore additions for Render
+*.dmg           # Desktop app bundles
+julia-*.tar.gz  # Julia runtime archives
 ```
 
 ### Docker Deployment
 
 ```dockerfile
-# Dockerfile example
-FROM rust:1.70 as builder
+# Dockerfile for production
+FROM rust:1.82 as builder
 WORKDIR /app
 COPY . .
-RUN cargo build --release
+RUN cargo build --release --bin notebook_server
 
 FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y julia
+RUN apt-get update && apt-get install -y curl tar
+# Julia installed via build script
 COPY --from=builder /app/target/release/notebook_server /usr/local/bin/
+COPY scripts/build_for_render.sh /app/
+RUN /app/build_for_render.sh
 CMD ["notebook_server"]
 ```
 
 ---
 
+## What's New in Version 1.0
+
+### 🚀 Major Features
+
+1. **Real-Time Debug Streaming**
+   - Complete transparency into LLM interactions
+   - Live event broadcasting via Tokio channels
+   - Debug endpoint at `/events/live` for development
+
+2. **Cloud Deployment Ready**
+   - Deployed on Render platform
+   - Automatic CI/CD pipeline
+   - Optimized Docker builds
+   - Git LFS management for large files
+
+3. **Production Desktop App**
+   - Version 1.0.0 with Cedar branding
+   - Updated high-quality icons
+   - macOS DMG installer
+   - Code signing ready
+
+4. **Enhanced Error Handling**
+   - Detailed error messages with recovery suggestions
+   - Debug console with request/response visibility
+   - Graceful degradation for missing endpoints
+
+5. **Improved Developer Experience**
+   - Comprehensive test suite with 20+ test scripts
+   - Build scripts for all platforms
+   - Complete documentation
+
 ## Conclusion
 
-Cedar Notebook provides a secure and robust framework for **LLM-driven data analysis**:
+Cedar Notebook v1.0 provides a production-ready, secure, and robust framework for **LLM-driven data analysis**:
 
 * **API keys are centrally managed** - Never stored in clients
 * **Backend controls all business logic** - UI is purely presentational
 * **Files are processed locally** - Only previews/metadata go to the LLM
 * **Parquet + DuckDB** ensure reproducibility and context
 * **Real-time updates via SSE** - See processing as it happens
+* **🆕 Full debugging transparency** - Watch LLM interactions in real-time
+* **🆕 Cloud-ready deployment** - Deploy to Render with one command
 * **Comprehensive test coverage** - Unit, integration, and E2E tests
 * **Native desktop experience** - Via Tauri with native file dialogs
+* **🆕 Version 1.0 stability** - Production-ready for enterprise use
 
-The system gracefully handles everything from simple arithmetic (*2+2*) to complex data ingestion workflows, with full error recovery and retry capabilities.
+The system gracefully handles everything from simple arithmetic (*2+2*) to complex data ingestion workflows, with full error recovery and retry capabilities, now with complete visibility into the AI's decision-making process.
 

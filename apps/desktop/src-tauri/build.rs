@@ -15,8 +15,15 @@ fn validate_api_key_path() {
     println!("cargo:warning=Validating API key fetch path...");
     
     // Check if we have a local API key (development)
-    if std::env::var("OPENAI_API_KEY").is_ok() {
-        println!("cargo:warning=✅ Using local OPENAI_API_KEY for build");
+    if let Ok(api_key) = std::env::var("OPENAI_API_KEY") {
+        // Validate it's not a placeholder
+        if api_key.contains("YOUR") || api_key.contains("REPLACE") || api_key.contains("HERE") || api_key.len() < 40 {
+            panic!("❌ Build failed: OPENAI_API_KEY contains a placeholder or is invalid. Please set a real API key.");
+        }
+        if !api_key.starts_with("sk-") {
+            panic!("❌ Build failed: OPENAI_API_KEY doesn't look like a valid OpenAI key (should start with 'sk-')");
+        }
+        println!("cargo:warning=✅ Using valid local OPENAI_API_KEY for build");
         return;
     }
     

@@ -981,29 +981,78 @@ async fn delete_dataset(Path(dataset_id): Path<String>) -> Result<Json<serde_jso
     })))
 }
 
-/// Get OpenAI API key from server environment for client provisioning
+/// Get OpenAI API key from server environment or fetch from onrender
 /// See docs/openai-key-flow.md for the complete key management strategy
-/// This endpoint allows the Cedar app to fetch the key once at startup
-/// and use it for all subsequent OpenAI API calls
+/// Priority:
+/// 1. Local OPENAI_API_KEY environment variable
+/// 2. Fetch from cedar-notebook.onrender.com using APP_SHARED_TOKEN
 async fn get_openai_key() -> Result<Json<serde_json::Value>, (StatusCode, String)> {
-    // Try to get the OpenAI API key from environment
-    let api_key = std::env::var("OPENAI_API_KEY")
-        .or_else(|_| std::env::var("openai_api_key"))
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "OpenAI API key not configured on server. Please set OPENAI_API_KEY environment variable.".to_string()))?;
-    
-    // Validate that it looks like a valid OpenAI key
-    if !api_key.starts_with("sk-") || api_key.len() < 40 {
-        return Err((StatusCode::INTERNAL_SERVER_ERROR, "Invalid OpenAI API key format on server".to_string()));
+    // Try to get the OpenAI API key from environment first
+    if let Ok(api_key) = std::env::var("OPENAI_API_KEY").or_else(|_| std::env::var("openai_api_key")) {
+        // Validate that it looks like a valid OpenAI key
+        if api_key.starts_with("sk-") && api_key.len() >= 40 {
+            let key_fingerprint = format!("{}...{}", &api_key[..6], &api_key[api_key.len()-4..]);
+            eprintln!("[cedar-server] Returning local OpenAI key with fingerprint: {}", key_fingerprint);
+            return Ok(Json(serde_json::json!({
+                "openai_api_key": api_key,
+                "source": "local_env",
+            })));
+        }
     }
     
-    // Log the request (with redacted key for security)
-    let key_fingerprint = format!("{}...{}", &api_key[..6], &api_key[api_key.len()-4..]);
-    eprintln!("[cedar-server] OpenAI key requested, returning key with fingerprint: {}", key_fingerprint);
+    // No local key, try to fetch from onrender server
+    eprintln!("[cedar-server] No local API key found, fetching from onrender...");
     
-    Ok(Json(serde_json::json!({
-        "openai_api_key": api_key,
-        "source": "server",
-    })))
+    let cedar_key_url = std::env::var("CEDAR_KEY_URL")
+        .unwrap_or_else(|_| "https://cedarnotebook-key.onrender.com".to_string());
+    let app_token = std::env::var("APP_SHARED_TOKEN")
+        .unwrap_or_else(|_| "403-298-09345-023495".to_string());
+    
+    // Fetch the key from onrender
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to create HTTP client: {}", e)))?;
+    
+    let endpoint = format!("{}/get-key", cedar_key_url);
+    eprintln!("[cedar-server] Fetching API key from: {}", endpoint);
+    
+    let response = client
+        .post(&endpoint)
+        .json(&serde_json::json!({
+            "token": app_token
+        }))
+        .send()
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to fetch key from onrender: {}", e)))?;
+    
+    if !response.status().is_success() {
+        return Err((StatusCode::INTERNAL_SERVER_ERROR, 
+            format!("Onrender server returned error: {}", response.status())));
+    }
+    
+    let json: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Invalid response from onrender: {}", e)))?;
+    
+    if let Some(api_key) = json.get("openai_api_key").and_then(|v| v.as_str()) {
+        if api_key.starts_with("sk-") && api_key.len() >= 40 {
+            // Cache the key in memory for this session
+            std::env::set_var("OPENAI_API_KEY", api_key);
+            
+            let key_fingerprint = format!("{}...{}", &api_key[..6], &api_key[api_key.len()-4..]);
+            eprintln!("[cedar-server] Successfully fetched and cached API key from onrender with fingerprint: {}", key_fingerprint);
+            
+            return Ok(Json(serde_json::json!({
+                "openai_api_key": api_key,
+                "source": "onrender",
+            })));
+        }
+    }
+    
+    Err((StatusCode::INTERNAL_SERVER_ERROR, 
+        "Failed to obtain valid API key. Please ensure OPENAI_API_KEY is set or onrender server is accessible.".to_string()))
 }
 
 /// Search for files on the local filesystem by name

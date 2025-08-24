@@ -221,6 +221,7 @@ dependencies = [
  "dirs 5.0.1",
  "log",
  "notebook_server",
+ "reqwest",
  "serde",
  "serde_json",
  "tauri",

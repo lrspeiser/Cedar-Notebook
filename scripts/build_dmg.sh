@@ -12,6 +12,7 @@ echo ""
 
 # Colors
 GREEN='\033[0;32m'
+RED='\033[0;31m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
@@ -19,7 +20,22 @@ NC='\033[0m'
 BUILD_DIR="/tmp/cedar-build-$(date +%Y%m%d-%H%M%S)"
 DMG_NAME="Cedar-Enhanced-$(date +%Y%m%d).dmg"
 
-echo -e "${YELLOW}Step 1: Building Rust backend...${NC}"
+# Step 0: Validate API key fetching before build
+echo -e "${YELLOW}Step 0: Validating API key configuration...${NC}"
+if [ -f "scripts/validate_api_key.sh" ]; then
+    bash scripts/validate_api_key.sh
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}❌ API key validation failed!${NC}"
+        echo "The DMG build is cancelled because the API key cannot be fetched."
+        echo "Please fix the API key configuration before building."
+        exit 1
+    fi
+    echo -e "${GREEN}✓ API key validation passed${NC}"
+else
+    echo -e "${YELLOW}⚠ Validation script not found, proceeding anyway...${NC}"
+fi
+
+echo -e "\n${YELLOW}Step 1: Building Rust backend...${NC}"
 cd ~/Projects/cedarcli
 cargo build --release --bin notebook_server
 
@@ -92,9 +108,9 @@ cat > "$BUILD_DIR/Cedar.app/Contents/Info.plist" << 'EOF'
     <key>LSEnvironment</key>
     <dict>
         <key>CEDAR_KEY_URL</key>
-        <string>https://cedar-notebook.onrender.com</string>
+        <string>https://cedar-notebook.onrender.com/v1/key</string>
         <key>APP_SHARED_TOKEN</key>
-        <string>cedar-2024-secure-token</string>
+        <string>403-298-09345-023495</string>
     </dict>
 </dict>
 </plist>

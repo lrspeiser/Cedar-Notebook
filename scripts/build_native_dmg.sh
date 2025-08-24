@@ -1,13 +1,12 @@
 #!/bin/bash
-# Build Cedar DMG with all improvements
+# Build Cedar Native DMG (Desktop App - No Browser)
 
-echo "🌲 Cedar DMG Builder"
-echo "===================="
-echo "Building Cedar with enhanced features:"
-echo "  - Dataset preview modal"
-echo "  - Real-time progress (SSE ready)"
-echo "  - Simplified frontend (backend handles everything)"
-echo "  - DuckDB integration fixed"
+echo "🌲 Cedar Native Desktop App Builder"
+echo "====================================="
+echo "Building Cedar as a native macOS application"
+echo "  - Native UI using egui (no browser)"
+echo "  - Standalone desktop app"
+echo "  - Automatic API key fetching"
 echo ""
 
 # Colors
@@ -17,8 +16,8 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 
 # Set build directory
-BUILD_DIR="/tmp/cedar-build-$(date +%Y%m%d-%H%M%S)"
-DMG_NAME="Cedar-Enhanced-$(date +%Y%m%d).dmg"
+BUILD_DIR="/tmp/cedar-native-build-$(date +%Y%m%d-%H%M%S)"
+DMG_NAME="Cedar-Native-$(date +%Y%m%d).dmg"
 
 # Step 0: Validate API key fetching before build
 echo -e "${YELLOW}Step 0: Validating API key configuration...${NC}"
@@ -35,36 +34,32 @@ else
     echo -e "${YELLOW}⚠ Validation script not found, proceeding anyway...${NC}"
 fi
 
-echo -e "\n${YELLOW}Step 1: Building Rust backend...${NC}"
+echo -e "\n${YELLOW}Step 1: Building native Cedar app with egui...${NC}"
 cd ~/Projects/cedarcli
-cargo build --release --bin notebook_server
+
+# Build the native egui app
+cargo build --release --bin cedar-egui
 
 if [ $? -ne 0 ]; then
-    echo "❌ Failed to build backend"
+    echo "❌ Failed to build native app"
     exit 1
 fi
-echo -e "${GREEN}✓ Backend built successfully${NC}"
+echo -e "${GREEN}✓ Native app built successfully${NC}"
 
 echo -e "\n${YELLOW}Step 2: Creating app bundle structure...${NC}"
 mkdir -p "$BUILD_DIR"
 mkdir -p "$BUILD_DIR/Cedar.app/Contents/MacOS"
 mkdir -p "$BUILD_DIR/Cedar.app/Contents/Resources"
-mkdir -p "$BUILD_DIR/Cedar.app/Contents/Resources/web-ui"
-mkdir -p "$BUILD_DIR/Cedar.app/Contents/Resources/julia_env"
 
 echo -e "${GREEN}✓ App bundle structure created${NC}"
 
-echo -e "\n${YELLOW}Step 3: Copying backend binary...${NC}"
-cp target/release/notebook_server "$BUILD_DIR/Cedar.app/Contents/MacOS/Cedar"
+echo -e "\n${YELLOW}Step 3: Copying native app binary...${NC}"
+cp target/release/cedar-egui "$BUILD_DIR/Cedar.app/Contents/MacOS/Cedar"
 chmod +x "$BUILD_DIR/Cedar.app/Contents/MacOS/Cedar"
-echo -e "${GREEN}✓ Backend binary copied${NC}"
+echo -e "${GREEN}✓ Native app binary copied${NC}"
 
-echo -e "\n${YELLOW}Step 4: Copying web UI files...${NC}"
-cp apps/web-ui/index.html "$BUILD_DIR/Cedar.app/Contents/Resources/web-ui/"
-echo -e "${GREEN}✓ Web UI copied${NC}"
-
-echo -e "\n${YELLOW}Step 4b: Copying environment configuration...${NC}"
-# Copy the .env file to the app bundle
+echo -e "\n${YELLOW}Step 4: Copying environment configuration...${NC}"
+# Copy the .env file to the app bundle if it exists
 if [ -f "apps/cedar-bundle/resources/.env" ]; then
     cp apps/cedar-bundle/resources/.env "$BUILD_DIR/Cedar.app/Contents/Resources/"
     echo -e "${GREEN}✓ Environment config copied${NC}"
@@ -72,12 +67,16 @@ else
     echo -e "${YELLOW}⚠ No .env file found, app will use defaults${NC}"
 fi
 
-echo -e "\n${YELLOW}Step 4c: Copying app icon...${NC}"
+echo -e "\n${YELLOW}Step 5: Copying app icon...${NC}"
 # Copy the Cedar icon to the app bundle
-cp images/icons/Cedar.icns "$BUILD_DIR/Cedar.app/Contents/Resources/AppIcon.icns"
-echo -e "${GREEN}✓ App icon copied${NC}"
+if [ -f "images/icons/Cedar.icns" ]; then
+    cp images/icons/Cedar.icns "$BUILD_DIR/Cedar.app/Contents/Resources/AppIcon.icns"
+    echo -e "${GREEN}✓ App icon copied${NC}"
+else
+    echo -e "${YELLOW}⚠ No icon found, using default${NC}"
+fi
 
-echo -e "\n${YELLOW}Step 5: Creating Info.plist...${NC}"
+echo -e "\n${YELLOW}Step 6: Creating Info.plist...${NC}"
 cat > "$BUILD_DIR/Cedar.app/Contents/Info.plist" << 'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -86,9 +85,9 @@ cat > "$BUILD_DIR/Cedar.app/Contents/Info.plist" << 'EOF'
     <key>CFBundleName</key>
     <string>Cedar</string>
     <key>CFBundleDisplayName</key>
-    <string>Cedar Agent</string>
+    <string>Cedar Desktop</string>
     <key>CFBundleIdentifier</key>
-    <string>com.cedar.agent</string>
+    <string>com.cedar.desktop</string>
     <key>CFBundleVersion</key>
     <string>1.0.0</string>
     <key>CFBundlePackageType</key>
@@ -96,7 +95,7 @@ cat > "$BUILD_DIR/Cedar.app/Contents/Info.plist" << 'EOF'
     <key>CFBundleSignature</key>
     <string>????</string>
     <key>CFBundleExecutable</key>
-    <string>cedar-launcher.sh</string>
+    <string>Cedar</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundleIconName</key>
@@ -117,49 +116,20 @@ cat > "$BUILD_DIR/Cedar.app/Contents/Info.plist" << 'EOF'
 EOF
 echo -e "${GREEN}✓ Info.plist created${NC}"
 
-echo -e "\n${YELLOW}Step 6: Creating launcher script...${NC}"
-cat > "$BUILD_DIR/Cedar.app/Contents/MacOS/cedar-launcher.sh" << 'EOF'
-#!/bin/bash
-# Cedar launcher script
-
-# Get the directory where this script is located
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-APP_DIR="$SCRIPT_DIR/.."
-
-# Set up environment
-# Load from bundled .env file if it exists
-if [ -f "$APP_DIR/Resources/.env" ]; then
-    export $(grep -v '^#' "$APP_DIR/Resources/.env" | xargs)
-fi
-
-# Start the backend server
-cd "$APP_DIR/Resources"
-"$SCRIPT_DIR/Cedar" &
-SERVER_PID=$!
-
-# Wait for server to start
-sleep 2
-
-# Open the browser to the local server
-open "http://localhost:8080"
-
-# Keep the script running
-wait $SERVER_PID
-EOF
-chmod +x "$BUILD_DIR/Cedar.app/Contents/MacOS/cedar-launcher.sh"
-echo -e "${GREEN}✓ Launcher script created${NC}"
-
 echo -e "\n${YELLOW}Step 7: Creating README...${NC}"
 cat > "$BUILD_DIR/README.txt" << 'EOF'
-Cedar Agent - Enhanced Version
-==============================
+Cedar Desktop - Native Application
+===================================
+
+This is the native desktop version of Cedar.
+No web browser required!
 
 Features:
-- AI-powered data analysis with Julia
-- CSV/Excel/JSON/Parquet file processing
-- Dataset preview with statistics
-- DuckDB integration for data storage
-- Real-time progress updates (coming soon)
+- Native macOS application
+- AI-powered data analysis
+- File processing capabilities
+- Automatic API key management
+- Direct desktop integration
 
 Installation:
 1. Drag Cedar.app to your Applications folder
@@ -169,12 +139,9 @@ The app automatically fetches the API key from the Cedar server.
 No manual configuration needed!
 
 Usage:
-- Type queries in the Research tab
-- Upload files via the Data tab or paperclip icon
-- Click on datasets to see detailed preview
-- View history in the History tab
-
-The backend handles all processing - the frontend is just a UI.
+- Launch the app directly from Applications
+- All processing happens within the native app
+- No browser or server components needed
 
 For support: https://github.com/yourusername/cedar
 EOF
@@ -206,12 +173,9 @@ rm -rf "$BUILD_DIR"
 echo -e "\n${GREEN}✅ Build complete!${NC}"
 echo -e "DMG created: ~/Desktop/$DMG_NAME"
 echo ""
-echo "To test:"
-echo "1. Make sure OPENAI_API_KEY is set in your environment"
-echo "2. Open the DMG and drag Cedar to Applications"
+echo "To install:"
+echo "1. Open the DMG file on your Desktop"
+echo "2. Drag Cedar.app to your Applications folder"
 echo "3. Launch Cedar from Applications"
 echo ""
-echo "The app will:"
-echo "- Start the backend server locally"
-echo "- Open your browser to http://localhost:8080"
-echo "- All processing happens in the backend"
+echo "This is a native desktop app - no browser needed!"

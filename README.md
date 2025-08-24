@@ -6,7 +6,18 @@ Cedar Notebook is a Rust-first project that wraps the core Cedar agent into a mu
 It exposes a CLI, an HTTP/WS server, and a Tauri desktop app; all three UIs delegate **all business logic** to a common backend.  
 The backend contains the long-running agent loop, executors for Julia and shell tasks, data-catalog/metadata helpers, run management, and OpenAI key management.
 
-This document provides a complete architecture overview of the codebase and explains how the LLM agent works, how API keys are obtained securely, how file processing is handled without uploading the full file to the model, and how Parquet/DuckDB metadata is used to help the model reason about available data. Several examples illustrate the system’s behaviour.
+### 🔑 Zero-Configuration API Key Management
+
+**Users NEVER need to configure API keys!** Cedar automatically fetches OpenAI API keys from a central key server at `https://cedarnotebook-key.onrender.com`. This means:
+
+- ✅ **No API key setup required** - Just run the app and it works
+- ✅ **Centrally managed keys** - Update keys in one place for all users
+- ✅ **Secure by default** - Keys never stored in client code or configs
+- ✅ **Automatic fallback** - Gracefully handles key server outages
+
+**For local development only**: Set `OPENAI_API_KEY` environment variable if not using the central key server.
+
+This document provides a complete architecture overview of the codebase and explains how the LLM agent works, how API keys are obtained securely, how file processing is handled without uploading the full file to the model, and how Parquet/DuckDB metadata is used to help the model reason about available data. Several examples illustrate the system's behaviour.
 
 ---
 
@@ -58,29 +69,56 @@ Separation of concerns – the backend lives in `notebook_core` and `notebook_se
 
 ---
 
-## API Key Management
+## API Key Management - Fully Automatic!
 
-Cedar uses a **flexible OpenAI API key model** with multiple sources. The backend checks for keys in this order:
+### 🎯 Production Mode (Default)
 
-1. **Request Body** – API key sent from client (if available)
-2. **Environment Variables** – `OPENAI_API_KEY` or `openai_api_key` 
-3. **Remote Key Service** – `CEDAR_KEY_URL` for centralized key management
-4. **Client-side Caching** – Keys cached in `~/.config/cedar-cli/openai_key.json` (24h TTL)
+**Cedar automatically fetches API keys from the central key server - NO USER CONFIGURATION NEEDED!**
 
-### Backend Key Resolution
-The server (`notebook_server/src/lib.rs`) attempts to find a key from:
-- Request payload (`api_key` field)
-- `OPENAI_API_KEY` environment variable
-- `openai_api_key` environment variable (lowercase)
-- `CEDAR_KEY_URL` relay service (if configured)
+When you run Cedar, the backend automatically:
+1. **Checks for local keys** (for development)
+2. **Fetches from Render key server** at `https://cedarnotebook-key.onrender.com`
+3. **Caches the key** for optimal performance
+4. **Handles all API calls** using the fetched key
+
+### How It Works
+
+The backend (`notebook_server/src/lib.rs`) manages all API keys:
+
+```rust
+// IMPORTANT: Business logic MUST be in backend. Frontend should NEVER handle API keys.
+// The backend automatically fetches keys from the central server - users don't configure anything!
+```
+
+**Key Resolution Order**:
+1. **Legacy request body** - For backwards compatibility only
+2. **Local environment** - `OPENAI_API_KEY` (development only)
+3. **🌟 Render key server** - `https://cedarnotebook-key.onrender.com` (PRODUCTION)
+
+### Architecture Principles
+
+- **NO business logic in frontend** - All LLM interactions happen in backend
+- **Automatic key provisioning** - Backend fetches keys from central server
+- **Zero user configuration** - It just works out of the box
+- **Secure by design** - Keys never exposed to client code
+
+### For Developers Only
+
+If developing locally without the key server:
+```bash
+export OPENAI_API_KEY="your-dev-key"
+cargo run --bin notebook_server
+```
+
+But in production, users just run the app - no setup needed!
 
 ### Error Handling
-- Missing key returns clear error: "No API key provided. Please set OPENAI_API_KEY environment variable."
-- Debug logs show which source provided the key
-- Frontend displays helpful error messages for missing keys
+- Clear error messages if key server is unreachable
+- Automatic retry logic for network issues  
+- Debug logs show key source and fingerprint (not full key)
+- Frontend shows helpful guidance for resolution
 
-The server side implements `/config/openai_key` returning `{ "openai_api_key": "...", "source": "..." }`.  
-See `docs/openai-key-flow.md` for full details.
+See `docs/openai-key-flow.md` for implementation details.
 
 ---
 

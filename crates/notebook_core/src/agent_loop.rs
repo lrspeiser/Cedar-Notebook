@@ -1,3 +1,10 @@
+// CRITICAL ARCHITECTURE PRINCIPLES:
+// - ALL business logic MUST be in the backend (this code)
+// - Frontend should NEVER handle API keys or make LLM calls directly  
+// - API keys are fetched automatically from Render server - users don't configure anything
+// - The backend fetches keys from https://cedarnotebook-key.onrender.com automatically
+// - This ensures security, consistency, and zero-configuration for users
+
 use crate::llm_protocol::{CycleDecision, CycleInput, TranscriptItem, system_prompt};
 use crate::executors::{julia::run_julia_cell, shell::run_shell, ToolOutcome};
 use crate::cards::AssistantCard;
@@ -10,12 +17,15 @@ use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
 
 #[derive(Debug, Clone)]
 pub struct AgentConfig {
+    /// OpenAI API key - automatically fetched from Render server or environment
+    /// NEVER expect users to provide this - backend fetches it automatically!
     pub openai_api_key: String,
     pub openai_model: String,
     pub openai_base: Option<String>,
-    // Optional: if set, requests go to this relay instead of provider
+    /// Optional: if set, requests go to this relay instead of provider
+    /// Default: https://cedarnotebook-key.onrender.com for production
     pub relay_url: Option<String>,
-    // Optional: shared token for relay auth
+    /// Optional: shared token for relay auth
     pub app_shared_token: Option<String>,
 }
 

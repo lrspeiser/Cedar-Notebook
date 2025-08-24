@@ -190,12 +190,14 @@ async fn handle_submit_query(body: SubmitQueryBody) -> anyhow::Result<SubmitQuer
     use notebook_core::runs::create_new_run;
     
     // Get API key from multiple sources in order of preference:
-    // 1. Request body (from client)
-    // 2. OPENAI_API_KEY environment variable
-    // 3. openai_api_key environment variable (lowercase)
-    // 4. CEDAR_KEY_URL remote service if configured
+    // IMPORTANT: Business logic MUST be in backend. Frontend should NEVER handle API keys.
+    // 1. Request body (from client) - for backwards compatibility only
+    // 2. OPENAI_API_KEY environment variable (for local development)
+    // 3. Fetch from Render key server at https://cedarnotebook-key.onrender.com (PRODUCTION)
+    // This ensures users NEVER need to configure API keys - they're centrally managed!
+    
     let api_key = if let Some(key) = body.api_key {
-        eprintln!("[QUERY] Using API key from request");
+        eprintln!("[QUERY] Using API key from request (legacy mode)");
         key
     } else if let Ok(key) = std::env::var("OPENAI_API_KEY") {
         eprintln!("[QUERY] Using API key from OPENAI_API_KEY env var");
@@ -203,17 +205,68 @@ async fn handle_submit_query(body: SubmitQueryBody) -> anyhow::Result<SubmitQuer
     } else if let Ok(key) = std::env::var("openai_api_key") {
         eprintln!("[QUERY] Using API key from openai_api_key env var");
         key
-    } else if let Ok(relay_url) = std::env::var("CEDAR_KEY_URL") {
-        // Try to fetch from remote key service
-        eprintln!("[QUERY] Attempting to fetch API key from relay service: {}", relay_url);
-        // For now, we'll just use the relay URL as a flag to indicate remote key management
-        // The actual key will be managed by the agent config
-        "relay-managed-key".to_string()
     } else {
-        eprintln!("[QUERY ERROR] No API key found in any source");
-        eprintln!("[QUERY ERROR] Checked: request body, OPENAI_API_KEY env, openai_api_key env, CEDAR_KEY_URL");
-        eprintln!("[QUERY ERROR] Please set one of these environment variables before starting the app");
-        return Err(anyhow::anyhow!("No API key provided. Please set OPENAI_API_KEY environment variable."));
+        // PRODUCTION: Auto-fetch from Render key server
+        // Users don't need to configure anything - it just works!
+        eprintln!("[QUERY] No local API key found, fetching from Cedar key server...");
+        
+        // Try multiple key server URLs in order of preference
+        let key_urls = vec![
+            std::env::var("CEDAR_KEY_URL").unwrap_or_else(|_| "https://cedarnotebook-key.onrender.com".to_string()),
+            "https://cedarnotebook-key.onrender.com".to_string(),
+            "https://cedar-notebook.onrender.com".to_string(),
+        ];
+        
+        let mut fetched_key = None;
+        let client = reqwest::Client::new();
+        
+        for url in &key_urls {
+            eprintln!("[QUERY] Trying to fetch API key from: {}/v1/key", url);
+            
+            // Build request with optional auth token
+            let mut request = client.get(format!("{}/v1/key", url));
+            if let Ok(token) = std::env::var("APP_SHARED_TOKEN") {
+                request = request.header("x-app-token", token);
+            }
+            
+            // Try to fetch the key
+            match request.send().await {
+                Ok(response) if response.status().is_success() => {
+                    match response.json::<serde_json::Value>().await {
+                        Ok(json) => {
+                            if let Some(key) = json.get("openai_api_key").and_then(|v| v.as_str()) {
+                                if key.starts_with("sk-") && key.len() >= 40 {
+                                    eprintln!("[QUERY] Successfully fetched API key from {}", url);
+                                    let fingerprint = format!("{}...{}", &key[..6], &key[key.len()-4..]);
+                                    eprintln!("[QUERY] API key fingerprint: {}", fingerprint);
+                                    fetched_key = Some(key.to_string());
+                                    break;
+                                }
+                            }
+                        }
+                        Err(e) => eprintln!("[QUERY] Failed to parse response from {}: {}", url, e),
+                    }
+                }
+                Ok(response) => eprintln!("[QUERY] Server returned status {} from {}", response.status(), url),
+                Err(e) => eprintln!("[QUERY] Failed to connect to {}: {}", url, e),
+            }
+        }
+        
+        match fetched_key {
+            Some(key) => key,
+            None => {
+                eprintln!("[QUERY ERROR] Failed to fetch API key from any Cedar key server");
+                eprintln!("[QUERY ERROR] Tried: {:?}", key_urls);
+                eprintln!("[QUERY ERROR] This is usually because:");
+                eprintln!("[QUERY ERROR]   1. The key server is down or unreachable");
+                eprintln!("[QUERY ERROR]   2. Network connectivity issues");
+                eprintln!("[QUERY ERROR]   3. Authentication token mismatch (if using APP_SHARED_TOKEN)");
+                eprintln!("[QUERY ERROR] ");
+                eprintln!("[QUERY ERROR] For local development, you can set OPENAI_API_KEY environment variable");
+                eprintln!("[QUERY ERROR] For production, ensure the Cedar key server is running");
+                return Err(anyhow::anyhow!("No API key available. The Cedar server automatically fetches keys from the central key server, but it appears to be unreachable. For local development, set OPENAI_API_KEY environment variable."));
+            }
+        }
     };
     
     // Build prompt based on whether we have file_info or just a text prompt

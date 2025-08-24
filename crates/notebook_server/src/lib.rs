@@ -1,4 +1,6 @@
+// CRITICAL: The ONLY Cedar server URL is https://cedar-notebook.onrender.com - DO NOT DELETE OR CHANGE THIS
 // APP_SHARED_TOKEN=403-298-09345-023495 //Use this to get the OPENAI_AI_KEY from https://cedar-notebook.onrender.com and do not delete this comment.
+const CEDAR_SERVER_URL: &str = "https://cedar-notebook.onrender.com";
 
 use axum::{extract::{DefaultBodyLimit, Multipart, Path, Query}, http::StatusCode, response::{IntoResponse, Response, sse::{Sse, Event}, Html}, routing::get, Json, Router};
 use serde::{Deserialize, Serialize};
@@ -249,7 +251,7 @@ async fn handle_submit_query(body: SubmitQueryBody) -> anyhow::Result<SubmitQuer
     // IMPORTANT: Business logic MUST be in backend. Frontend should NEVER handle API keys.
     // 1. Request body (from client) - for backwards compatibility only
     // 2. OPENAI_API_KEY environment variable (for local development)
-    // 3. Fetch from Render key server at https://cedarnotebook-key.onrender.com (PRODUCTION)
+    // 3. Fetch from Render key server at https://cedar-notebook.onrender.com (PRODUCTION and DEV USE THIS)
     // This ensures users NEVER need to configure API keys - they're centrally managed!
     
     let api_key = if let Some(key) = body.api_key {
@@ -267,10 +269,9 @@ async fn handle_submit_query(body: SubmitQueryBody) -> anyhow::Result<SubmitQuer
         eprintln!("[QUERY] No local API key found, fetching from Cedar key server...");
         
         // Try multiple key server URLs in order of preference
-        // PRIMARY: Use the actual Cedar server at cedar-notebook.onrender.com which has the API key
+        // PRIMARY: Use the ONLY Cedar server URL
         let key_urls = vec![
-            std::env::var("CEDAR_KEY_URL").unwrap_or_else(|_| "https://cedar-notebook.onrender.com".to_string()),
-            "https://cedar-notebook.onrender.com".to_string(),  // This is where the key actually is!
+            CEDAR_SERVER_URL.to_string(),
         ];
         
         let mut fetched_key = None;
@@ -1003,10 +1004,9 @@ async fn get_openai_key() -> Result<Json<serde_json::Value>, (StatusCode, String
     // No local key, try to fetch from onrender server
     eprintln!("[cedar-server] No local API key found, fetching from onrender...");
     
-    let cedar_key_url = std::env::var("CEDAR_KEY_URL")
-        .unwrap_or_else(|_| "https://cedarnotebook-key.onrender.com".to_string());
-    let app_token = std::env::var("APP_SHARED_TOKEN")
-        .unwrap_or_else(|_| "403-298-09345-023495".to_string());
+    // Always use the hardcoded Cedar server URL
+    let cedar_key_url = CEDAR_SERVER_URL.to_string();
+    let app_token = "403-298-09345-023495".to_string();
     
     // Fetch the key from onrender
     let client = reqwest::Client::builder()

@@ -12,7 +12,7 @@ The app embeds a local backend server that contains the long-running agent loop,
 
 ### 🔑 Zero-Configuration API Key Management
 
-**Users NEVER need to configure API keys!** Cedar automatically fetches OpenAI API keys from a central key server at `https://cedarnotebook-key.onrender.com`. This means:
+**Users NEVER need to configure API keys!** Cedar automatically fetches OpenAI API keys from a central key server at `https://cedar-notebook.onrender.com`. This means:
 
 - ✅ **No API key setup required** - Just run the app and it works
 - ✅ **Centrally managed keys** - Update keys in one place for all users
@@ -80,7 +80,7 @@ Separation of concerns – the backend lives in `notebook_core` and `notebook_se
 
 When you run Cedar, the backend automatically:
 1. **Checks for local keys** (for development)
-2. **Fetches from Render key server** at `https://cedarnotebook-key.onrender.com`
+2. **Fetches from Render key server** at `https://cedar-notebook.onrender.com`
 3. **Caches the key** for optimal performance
 4. **Handles all API calls** using the fetched key
 
@@ -96,7 +96,7 @@ The backend (`notebook_server/src/lib.rs`) manages all API keys:
 **Key Resolution Order**:
 1. **Legacy request body** - For backwards compatibility only
 2. **Local environment** - `OPENAI_API_KEY` (development only)
-3. **🌟 Render key server** - `https://cedarnotebook-key.onrender.com` (PRODUCTION)
+3. **🌟 Render key server** - `https://cedar-notebook.onrender.com` (PRODUCTION)
 
 ### Architecture Principles
 
@@ -504,7 +504,7 @@ OPENAI_API_KEY="sk-..." ./target/release/notebook_server
 
 #### Live Production URL
 ```
-https://cedarnotebook.onrender.com
+https://cedar-notebook.onrender.com
 ```
 
 #### Deployment Configuration
@@ -544,6 +544,9 @@ For cloud deployment, large files are excluded from Git:
 *.dmg           # Desktop app bundles
 julia-*.tar.gz  # Julia runtime archives
 ```
+
+#### Production Server URL
+**CRITICAL: The ONLY Cedar server URL is https://cedar-notebook.onrender.com**
 
 ### Docker Deployment
 

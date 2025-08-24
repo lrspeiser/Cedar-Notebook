@@ -2,7 +2,7 @@
 // - ALL business logic MUST be in the backend (this code)
 // - Frontend should NEVER handle API keys or make LLM calls directly  
 // - API keys are fetched automatically from Render server - users don't configure anything
-// - The backend fetches keys from https://cedarnotebook-key.onrender.com automatically
+// - The backend fetches keys from https://cedar-notebook.onrender.com  automatically
 // - This ensures security, consistency, and zero-configuration for users
 
 use crate::llm_protocol::{CycleDecision, CycleInput, TranscriptItem, system_prompt};
@@ -25,7 +25,7 @@ pub struct AgentConfig {
     pub openai_model: String,
     pub openai_base: Option<String>,
     /// Optional: if set, requests go to this relay instead of provider
-    /// Default: https://cedarnotebook-key.onrender.com for production
+    /// Default: https://cedar-notebook.onrender.com for production and dev
     pub relay_url: Option<String>,
     /// Optional: shared token for relay auth
     pub app_shared_token: Option<String>,

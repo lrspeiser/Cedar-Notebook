@@ -728,19 +728,8 @@
                     prompt: query
                 };
                 
-                // Try to get API key from server config endpoint first
-                try {
-                    const keyResponse = await fetch(`${API_URL}/config/openai_key`);
-                    if (keyResponse.ok) {
-                        const keyData = await keyResponse.json();
-                        if (keyData.openai_api_key) {
-                            requestBody.api_key = keyData.openai_api_key;
-                            debug('Using API key from server config');
-                        }
-                    }
-                } catch (e) {
-                    debug('Could not fetch API key from server, will rely on server environment', true);
-                }
+                // IMPORTANT: Frontend NEVER handles API keys
+                // The backend will automatically fetch and use the API key
                 
                 if (currentFile) {
                     requestBody.file_info = {

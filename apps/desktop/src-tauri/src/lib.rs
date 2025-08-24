@@ -4,6 +4,8 @@ use tauri::Manager;
 use tauri::menu::{Menu, MenuItemBuilder, SubmenuBuilder};
 use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
+use notebook_core::agent_loop::{agent_loop, AgentConfig};
+use notebook_core::key_manager::KeyManager;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct FileInfo {
@@ -27,22 +29,42 @@ struct SubmitQueryResponse {
 async fn cmd_submit_query(
     body: SubmitQueryBody,
 ) -> Result<SubmitQueryResponse, String> {
-    // Use the native backend to process the query
+    
+    // Use the native backend to process the query with the actual agent loop
     let query = body.prompt.clone();
     
-    // For now, since submit_query is just a placeholder that returns immediately,
-    // we can call it directly without worrying about thread safety
-    let result = format!("Query received: {}", query);
+    // Get API key directly
+    let key_manager = KeyManager::new()
+        .map_err(|e| format!("Failed to create key manager: {}", e))?;
+    let api_key = key_manager.get_api_key().await
+        .map_err(|e| format!("Failed to get API key: {}", e))?;
     
-    // Generate a simple run ID
-    let run_id = format!("run_{}", std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs());
+    // Create run directory
+    let run_id = format!("run_{}", chrono::Utc::now().timestamp_millis());
+    let runs_root = dirs::data_dir()
+        .ok_or("Failed to get data directory")?
+        .join("CedarAI")
+        .join("runs");
+    std::fs::create_dir_all(&runs_root)
+        .map_err(|e| format!("Failed to create runs directory: {}", e))?;
+    let run_dir = runs_root.join(&run_id);
+    
+    // Configure agent
+    let config = AgentConfig {
+        openai_api_key: api_key,
+        openai_model: std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o-mini".to_string()),
+        openai_base: None,
+        relay_url: std::env::var("CEDAR_KEY_URL").ok(),
+        app_shared_token: std::env::var("APP_SHARED_TOKEN").ok(),
+    };
+    
+    // Run agent loop
+    let result = agent_loop(&run_dir, &query, 10, config).await
+        .map_err(|e| format!("Agent loop failed: {}", e))?;
     
     Ok(SubmitQueryResponse {
         run_id,
-        final_message: result,
+        final_message: result.final_output.unwrap_or_else(|| format!("Completed in {} turns", result.turns_used)),
     })
 }
 

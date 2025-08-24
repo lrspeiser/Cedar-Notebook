@@ -56,9 +56,35 @@ impl CedarBackend {
     
     /// Submit a query to the agent
     pub async fn submit_query(&self, query: &str) -> Result<String> {
-        // For now, just return a placeholder
-        // TODO: Properly integrate agent_loop with correct parameters
-        Ok(format!("Query received: {}", query))
+        use notebook_core::agent_loop::{agent_loop, AgentConfig, AgentResult};
+        use std::path::PathBuf;
+        
+        // Get API key
+        let api_key = self.key_manager.get_api_key().await?;
+        
+        // Create run directory
+        let run_id = format!("run_{}", chrono::Utc::now().timestamp_millis());
+        let runs_root = directories::ProjectDirs::from("com", "CedarAI", "CedarAI")
+            .context("Failed to get project directories")?
+            .data_dir()
+            .join("runs");
+        std::fs::create_dir_all(&runs_root)?;
+        let run_dir = runs_root.join(&run_id);
+        
+        // Configure agent
+        let config = AgentConfig {
+            openai_api_key: api_key,
+            openai_model: std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o-mini".to_string()),
+            openai_base: None,
+            relay_url: std::env::var("CEDAR_KEY_URL").ok(),
+            app_shared_token: std::env::var("APP_SHARED_TOKEN").ok(),
+        };
+        
+        // Run agent loop
+        let result = agent_loop(&run_dir, query, 10, config).await?;
+        
+        // Return the final output
+        Ok(result.final_output.unwrap_or_else(|| format!("Completed in {} turns", result.turns_used)))
     }
     
     /// Upload and process a file

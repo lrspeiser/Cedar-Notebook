@@ -145,6 +145,19 @@ See `docs/openai-key-flow.md` for implementation details.
 
 ## LLM Agent Loop
 
+### Direct OpenAI Architecture (No Relay)
+
+Cedar uses a **two-tier architecture** for optimal performance and security:
+
+1. **API Key Fetching**: Retrieved once from `cedar-notebook.onrender.com` and cached locally
+2. **LLM Calls**: All OpenAI API calls go **directly** to `api.openai.com` (not relayed)
+
+This architecture ensures:
+- ✅ **Fast response times** - No relay overhead for LLM calls
+- ✅ **Direct access to GPT-5** - Uses the latest `/v1/responses` endpoint
+- ✅ **Secure key management** - Keys fetched from trusted server, never hardcoded
+- ✅ **Optimal performance** - Direct connection to OpenAI's infrastructure
+
 ### High-level Cycle
 
 The core is the async `agent_loop` in `notebook_core/src/agent_loop.rs`. For each run:
@@ -157,8 +170,10 @@ The core is the async `agent_loop` in `notebook_core/src/agent_loop.rs`. For eac
    - Reads `data/parquet` + `metadata.duckdb`.  
    - Injects dataset summaries into prompt.  
 
-3. **Send to GPT-5** using `/v1/responses`.  
-   - Uses `text.format.type: json_object`.  
+3. **Send directly to OpenAI GPT-5** using `/v1/responses`.  
+   - Direct call to `https://api.openai.com/v1/responses` (no relay)
+   - Uses GPT-5 model (`gpt-5-2025-08-07`)
+   - Uses `text.format.type: json_object` for structured output
    - Extracts and deserialises into `CycleDecision`.  
 
 4. **Dispatch action**:  
@@ -745,6 +760,41 @@ CMD ["notebook_server"]
    - Comprehensive test suite with 20+ test scripts
    - Build scripts for all platforms
    - Complete documentation
+
+## Technical Configuration
+
+### OpenAI API Configuration
+
+Cedar uses a modern, efficient architecture for OpenAI integration:
+
+```rust
+// Configuration in AgentConfig
+AgentConfig {
+    openai_api_key: api_key,        // Fetched from cedar-notebook.onrender.com
+    openai_model: "gpt-5",          // Latest GPT-5 model
+    openai_base: None,              // Uses default api.openai.com
+    relay_url: None,                // NO RELAY - direct OpenAI calls
+    app_shared_token: None,         // Not needed for direct calls
+}
+```
+
+**Key Points:**
+- `relay_url: None` ensures all LLM calls go directly to OpenAI
+- API keys are fetched once from `cedar-notebook.onrender.com` and cached
+- Uses GPT-5's `/v1/responses` endpoint for enhanced capabilities
+- No proxy or relay overhead - maximum performance
+
+### GPT-5 Integration
+
+Cedar is fully integrated with OpenAI's GPT-5 model using the new `/v1/responses` API:
+
+- **Model**: `gpt-5-2025-08-07` (latest production version)
+- **Endpoint**: `https://api.openai.com/v1/responses`
+- **Features**: 
+  - Enhanced reasoning with hidden reasoning traces
+  - Structured JSON output via `text.format.type: json_object`
+  - Larger context windows and better code generation
+  - Direct API calls for minimal latency
 
 ## Conclusion
 

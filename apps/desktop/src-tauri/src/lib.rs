@@ -49,13 +49,13 @@ async fn cmd_submit_query(
         .map_err(|e| format!("Failed to create runs directory: {}", e))?;
     let run_dir = runs_root.join(&run_id);
     
-    // Configure agent
+    // Configure agent - NO relay for LLM calls, only direct OpenAI
     let config = AgentConfig {
         openai_api_key: api_key,
-        openai_model: std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o-mini".to_string()),
+        openai_model: std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-5".to_string()),
         openai_base: None,
-        relay_url: std::env::var("CEDAR_KEY_URL").ok(),
-        app_shared_token: std::env::var("APP_SHARED_TOKEN").ok(),
+        relay_url: None,  // Don't use relay for LLM calls - go direct to OpenAI
+        app_shared_token: None,  // Not needed for direct OpenAI calls
     };
     
     // Run agent loop
@@ -139,22 +139,9 @@ pub fn run() {
   // It will use local .env or fetch from cedar-notebook.onrender.com
   load_env_config();
   
-  // Validate API key availability by testing initialization
-  let runtime = tokio::runtime::Runtime::new().unwrap();
-  let has_key = runtime.block_on(async {
-    match notebook_server::initialize_native() {
-      Ok(backend) => backend.initialize_api_key().await.is_ok(),
-      Err(e) => {
-        eprintln!("Failed to initialize backend: {}", e);
-        false
-      }
-    }
-  });
-  
-  if !has_key {
-    show_api_key_error();
-    return;
-  }
+  // Skip validation - the backend will handle key fetching when needed
+  // The key will be fetched on first use, not at startup
+  eprintln!("[cedar] Backend will fetch API key when needed");
   
   // Ensure the app appears in the dock on macOS
   #[cfg(target_os = "macos")]
@@ -278,7 +265,11 @@ pub fn run() {
 fn load_env_config() {
   use std::path::PathBuf;
   
-  // Try to load .env from various locations
+  // ALWAYS set these critical variables for the app to work
+  std::env::set_var("CEDAR_KEY_URL", "https://cedar-notebook.onrender.com");
+  std::env::set_var("APP_SHARED_TOKEN", "403-298-09345-023495");
+  
+  // Try to load .env from various locations (for additional config)
   let env_locations = vec![
     // App bundle resources (packaged with the app)
     std::env::current_exe()

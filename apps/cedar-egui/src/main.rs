@@ -371,13 +371,13 @@ async fn process_query_with_agent(query: &str) -> Result<String, Box<dyn std::er
     let api_key = std::env::var("OPENAI_API_KEY")
         .map_err(|_| "OPENAI_API_KEY not set. Please configure in Settings.")?;
     
-    // Create agent configuration
+    // Create agent configuration - NO relay for LLM calls, only direct OpenAI
     let config = notebook_core::agent_loop::AgentConfig {
         openai_api_key: api_key,
-        openai_model: "gpt-4".to_string(),
+        openai_model: "gpt-5".to_string(),
         openai_base: None,
-        relay_url: Some("https://cedar-notebook.onrender.com".to_string()),
-        app_shared_token: Some("403-298-09345-023495".to_string()),
+        relay_url: None,  // Don't use relay for LLM calls - go direct to OpenAI
+        app_shared_token: None,  // Not needed for direct OpenAI calls
     };
     
     // Run the agent loop

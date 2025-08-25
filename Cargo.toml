@@ -9,7 +9,7 @@ members = [
     "crates/notebook_server",
     "crates/notebook_tauri",
     "apps/desktop/src-tauri"
-]
+, "test_cedar_app"]
 resolver = "2"
 
 [workspace.package]

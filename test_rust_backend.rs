@@ -39,14 +39,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::fs::create_dir_all(&run_dir)?;
     println!("\n>>> CREATED RUN DIRECTORY: {:?}", run_dir);
     
-    // Configure agent
+    // Configure agent - NO relay for LLM calls, only direct OpenAI
     println!("\n>>> CONFIGURING AGENT");
     let config = AgentConfig {
         openai_api_key: api_key.clone(),
-        openai_model: "gpt-4o-mini".to_string(),
+        openai_model: "gpt-5".to_string(),
         openai_base: None,
-        relay_url: Some("https://cedar-notebook.onrender.com".to_string()),
-        app_shared_token: Some("403-298-09345-023495".to_string()),
+        relay_url: None,  // Don't use relay for LLM calls - go direct to OpenAI
+        app_shared_token: None,  // Not needed for direct OpenAI calls
     };
     println!("   Model: {}", config.openai_model);
     println!("   Relay URL: {:?}", config.relay_url);

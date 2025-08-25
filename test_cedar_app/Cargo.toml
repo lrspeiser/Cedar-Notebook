@@ -1,0 +1,16 @@
+[package]
+name = "test-cedar-app"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.11", features = ["json"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+colored = "2"
+notebook_core = { path = "../crates/notebook_core" }
+notebook_server = { path = "../crates/notebook_server" }
+anyhow = "1.0"
